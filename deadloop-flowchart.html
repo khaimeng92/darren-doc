@@ -557,62 +557,6 @@
     </table>
   </div>
 
-  <!-- ===== 6. THE FIX ===== -->
-  <div class="section">
-    <div class="badge b-green">THE FIX</div>
-    <h2>Solution: fixDuplicateTimestampsGuaranteed</h2>
-    <p class="lead">Replace the retry-based approach with a single-pass O(n) algorithm that guarantees unique timestamps without any loop.</p>
-
-    <div class="fix-grid">
-      <div class="fix-card old">
-        <div class="fc-label">Before — fixDuplicateTimestamps</div>
-        <h4>Retry loop (broken)</h4>
-        <ul>
-          <li>while loop retries until no duplicates</li>
-          <li>Depends on proposalId to modify timestamps</li>
-          <li>Returns true even when nothing is fixed</li>
-          <li>Synchronous — blocks event loop</li>
-          <li>No max iteration guard</li>
-        </ul>
-      </div>
-      <div class="fix-card new">
-        <div class="fc-label">After — fixDuplicateTimestampsGuaranteed</div>
-        <h4>Single pass O(n)</h4>
-        <ul>
-          <li>No loop — single traversal of all docs</li>
-          <li>Does NOT depend on proposalId</li>
-          <li>Groups by base second, assigns unique ms (0..999)</li>
-          <li>Overflows to next second if >1000 per group</li>
-          <li>Mathematically guaranteed unique — impossible to deadloop</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="codeblock" style="margin-top:20px;">
-      <span class="cm">// New algorithm — O(n), no retry, no proposalId dependency</span><br><br>
-      <span class="hl-green"><span class="kw">function</span> <span class="fn">fixDuplicateTimestampsGuaranteed</span>(mappedDocs, processId) {</span>
-      <span class="hl-green">&nbsp;&nbsp;<span class="kw">const</span> groups = <span class="kw">new</span> <span class="fn">Map</span>();  <span class="cm">// group by base second</span></span>
-      <br>
-      <span class="hl-green">&nbsp;&nbsp;mappedDocs.<span class="fn">forEach</span>((doc, index) => {</span>
-      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> baseSecond = doc.completeTime.<span class="fn">substring</span>(<span class="num">0</span>, <span class="num">19</span>);</span>
-      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;groups.<span class="fn">get</span>(baseSecond)?.<span class="fn">push</span>(index) ?? groups.<span class="fn">set</span>(baseSecond, [index]);</span>
-      <span class="hl-green">&nbsp;&nbsp;});</span>
-      <br>
-      <span class="hl-green">&nbsp;&nbsp;<span class="kw">for</span> (<span class="kw">const</span> [baseSecond, indices] <span class="kw">of</span> groups) {</span>
-      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;indices.<span class="fn">forEach</span>((docIndex, slot) => {</span>
-      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> extraSeconds = Math.<span class="fn">floor</span>(slot / <span class="num">1000</span>);</span>
-      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> ms = slot % <span class="num">1000</span>;  <span class="cm">// unique ms per doc</span></span>
-      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mappedDocs[docIndex].completeTime = <span class="str">`${adjustedBase}.${ms}`</span>;</span>
-      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;});</span>
-      <span class="hl-green">&nbsp;&nbsp;}</span>
-      <span class="hl-green">}</span>
-    </div>
-
-    <div class="callout callout-green" style="margin-top:16px;">
-      <strong>Why this can never deadloop:</strong> There is no while/retry. Each doc gets assigned slot 0, 1, 2, ... within its second group. Slot → unique millisecond. If a second has >1000 docs, extra seconds are allocated. One pass, guaranteed unique, O(n).
-    </div>
-  </div>
-
 </div>
 
 <div class="foot">PMS Engineering · Post-Mortem · Feb 2026</div>
