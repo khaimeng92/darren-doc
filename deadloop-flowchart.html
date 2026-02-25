@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dead Loop Root Cause Analysis &amp; Fix</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: #1e293b;
+    --border2: #2d3a4f;
+    --text: #e2e8f0;
+    --muted: #7c8ba1;
+    --red: #f43f5e;
+    --red-dim: rgba(244,63,94,.12);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,.12);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,.12);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245,158,11,.12);
+    --purple: #a855f7;
+    --purple-dim: rgba(168,85,247,.12);
+    --cyan: #06b6d4;
+    --skull: #f43f5e;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(160deg, #1a0a1e 0%, #0a0e1a 40%, #0a1628 100%);
+    padding: 56px 24px 48px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -60%;
+    left: 20%;
+    width: 60%;
+    height: 200%;
+    background: radial-gradient(ellipse, rgba(244,63,94,.08) 0%, transparent 60%);
+  }
+  .hero-skull { font-size: 3rem; margin-bottom: 12px; position: relative; }
+  .hero h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; position: relative; }
+  .hero p { color: var(--muted); font-size: .95rem; position: relative; margin-top: 6px; }
+  .hero .htag {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 5px 16px;
+    border-radius: 100px;
+    background: var(--red-dim);
+    border: 1px solid rgba(244,63,94,.25);
+    color: var(--red);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .8px;
+    position: relative;
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 20px; }
+
+  /* Section */
+  .section { padding: 48px 0; }
+  .section + .section { border-top: 1px solid var(--border); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 14px;
+    border-radius: 100px;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .b-blue   { background:var(--blue-dim);   color:var(--blue);   border:1px solid rgba(59,130,246,.25); }
+  .b-red    { background:var(--red-dim);    color:var(--red);    border:1px solid rgba(244,63,94,.25); }
+  .b-amber  { background:var(--amber-dim);  color:var(--amber);  border:1px solid rgba(245,158,11,.25); }
+  .b-green  { background:var(--green-dim);  color:var(--green);  border:1px solid rgba(34,197,94,.25); }
+  .b-purple { background:var(--purple-dim); color:var(--purple); border:1px solid rgba(168,85,247,.25); }
+
+  .section h2 { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; margin-bottom: 6px; }
+  .section .lead { font-size: .9rem; color: var(--muted); margin-bottom: 28px; max-width: 680px; }
+
+  /* Flow nodes */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .fnode {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 14px;
+    padding: 18px 24px;
+    width: 100%;
+    max-width: 660px;
+  }
+  .fnode.red  { border-color: var(--red);  box-shadow: 0 0 24px rgba(244,63,94,.1); }
+  .fnode.blue { border-color: var(--blue); box-shadow: 0 0 24px rgba(59,130,246,.08); }
+  .fnode.green{ border-color: var(--green);box-shadow: 0 0 24px rgba(34,197,94,.08); }
+  .fnode.amber{ border-color: var(--amber);box-shadow: 0 0 24px rgba(245,158,11,.08); }
+  .fnode .fl  { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 5px; }
+  .fnode .ft  { font-weight: 600; font-size: .95rem; }
+  .fnode .fd  { font-size: .83rem; color: var(--muted); margin-top: 3px; }
+  .fnode code { font-family: 'JetBrains Mono', monospace; background: rgba(255,255,255,.06); padding: 1px 7px; border-radius: 5px; font-size: .78rem; }
+
+  .farrow { width: 2px; height: 24px; background: var(--border2); position: relative; }
+  .farrow::after { content:''; position:absolute; bottom:-4px; left:50%; transform:translateX(-50%); border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid var(--border2); }
+  .farrow.red   { background:var(--red); }
+  .farrow.red::after  { border-top-color:var(--red); }
+  .farrow.green { background:var(--green); }
+  .farrow.green::after{ border-top-color:var(--green); }
+  .farrow.amber { background:var(--amber); }
+  .farrow.amber::after{ border-top-color:var(--amber); }
+
+  /* Dead loop visual */
+  .loop-box {
+    background: linear-gradient(135deg, rgba(244,63,94,.04), rgba(244,63,94,.02));
+    border: 2px solid rgba(244,63,94,.3);
+    border-radius: 18px;
+    padding: 32px 28px;
+    position: relative;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .loop-box::before {
+    content: '♾️ INFINITE LOOP';
+    position: absolute;
+    top: -12px;
+    left: 24px;
+    background: var(--bg);
+    padding: 2px 14px;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--red);
+    border: 1px solid rgba(244,63,94,.3);
+    border-radius: 6px;
+  }
+  .loop-step {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 14px;
+  }
+  .loop-step:last-child { margin-bottom: 0; }
+  .loop-step .ls-num {
+    display: inline-flex;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    font-size: .7rem;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .ls-num.red  { background:var(--red-dim);  color:var(--red); }
+  .ls-num.amber{ background:var(--amber-dim);color:var(--amber); }
+  .loop-step h4 { display:inline; font-size:.9rem; font-weight:600; }
+  .loop-step p  { font-size:.83rem; color:var(--muted); margin-top:6px; }
+  .loop-step .code-inline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .78rem;
+    background: rgba(255,255,255,.05);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 10px;
+    display: block;
+    overflow-x: auto;
+    line-height: 1.6;
+  }
+  .loop-back {
+    text-align: center;
+    padding: 12px 0 0;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--red);
+  }
+  .loop-back span {
+    display: inline-block;
+    padding: 4px 16px;
+    border: 1.5px dashed rgba(244,63,94,.4);
+    border-radius: 8px;
+    background: var(--red-dim);
+  }
+
+  /* Event loop diagram */
+  .evloop {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 0;
+    max-width: 660px;
+    margin: 0 auto;
+    align-items: center;
+  }
+  @media(max-width:600px) { .evloop { grid-template-columns:1fr; } }
+  .evloop-box {
+    border-radius: 14px;
+    padding: 22px;
+    text-align: center;
+  }
+  .evloop-box h4 { font-size:.85rem; font-weight:600; margin-bottom:8px; }
+  .evloop-box p  { font-size:.8rem; color:var(--muted); }
+  .evloop-box.stack {
+    background: var(--red-dim);
+    border: 1.5px solid rgba(244,63,94,.3);
+  }
+  .evloop-box.timer {
+    background: var(--surface);
+    border: 1.5px solid var(--border2);
+    opacity: .5;
+  }
+  .evloop-mid {
+    text-align: center;
+    font-size: 1.4rem;
+    color: var(--red);
+  }
+
+  /* Bug table */
+  .bug-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border2);
+    font-size: .85rem;
+  }
+  .bug-table th {
+    background: var(--surface2);
+    padding: 14px 18px;
+    text-align: left;
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--muted);
+  }
+  .bug-table td {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .bug-table td:first-child { font-weight: 600; white-space: nowrap; }
+  .bug-table tr:hover { background: rgba(255,255,255,.02); }
+
+  /* Fix section */
+  .fix-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media(max-width:640px) { .fix-grid { grid-template-columns:1fr; } }
+  .fix-card {
+    border-radius: 14px;
+    padding: 22px;
+  }
+  .fix-card.old {
+    background: var(--red-dim);
+    border: 1px solid rgba(244,63,94,.25);
+  }
+  .fix-card.new {
+    background: var(--green-dim);
+    border: 1px solid rgba(34,197,94,.25);
+  }
+  .fix-card .fc-label {
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .fix-card.old .fc-label { color: var(--red); }
+  .fix-card.new .fc-label { color: var(--green); }
+  .fix-card h4 { font-size: .95rem; font-weight: 600; margin-bottom: 8px; }
+  .fix-card ul { list-style: none; font-size: .83rem; color: var(--muted); }
+  .fix-card ul li { padding: 3px 0; }
+  .fix-card.old ul li::before { content: '✗ '; color: var(--red); font-weight: 700; }
+  .fix-card.new ul li::before { content: '✓ '; color: var(--green); font-weight: 700; }
+
+  /* Code block */
+  .codeblock {
+    background: #080c16;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 22px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .78rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin-top: 14px;
+  }
+  .codeblock .kw { color: #c084fc; }
+  .codeblock .fn { color: #60a5fa; }
+  .codeblock .cm { color: #475569; }
+  .codeblock .str{ color: #4ade80; }
+  .codeblock .num{ color: #f97316; }
+  .codeblock .hl-red {
+    display: block;
+    background: rgba(244,63,94,.1);
+    margin: 0 -22px;
+    padding: 0 22px;
+    border-left: 3px solid var(--red);
+  }
+  .codeblock .hl-green {
+    display: block;
+    background: rgba(34,197,94,.08);
+    margin: 0 -22px;
+    padding: 0 22px;
+    border-left: 3px solid var(--green);
+  }
+
+  /* Callout */
+  .callout {
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-size: .85rem;
+    margin-top: 16px;
+  }
+  .callout-red   { background:var(--red-dim);   border:1px solid rgba(244,63,94,.2);  color:#fda4af; }
+  .callout-green { background:var(--green-dim); border:1px solid rgba(34,197,94,.2);  color:#86efac; }
+  .callout-amber { background:var(--amber-dim); border:1px solid rgba(245,158,11,.2); color:#fcd34d; }
+  .callout strong { font-weight: 700; }
+
+  /* Impact list */
+  .impacts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .impact-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 18px;
+    text-align: center;
+  }
+  .impact-card .ic-icon { font-size: 1.6rem; margin-bottom: 6px; }
+  .impact-card .ic-text { font-size: .82rem; color: var(--muted); }
+  .impact-card .ic-text strong { color: var(--red); }
+
+  .foot { text-align:center; padding:40px 20px; color:#475569; font-size:.75rem; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-skull">💀</div>
+  <h1>Dead Loop — Root Cause Analysis</h1>
+  <p>syncClickhousePluginConsumer · fixDuplicateTimestamps</p>
+  <div class="htag">POST-MORTEM · INCIDENT RESOLVED</div>
+</div>
+
+<div class="wrap">
+
+  <!-- ===== 1. TRIGGER FLOW ===== -->
+  <div class="section">
+    <div class="badge b-blue">TRIGGER FLOW</div>
+    <h2>How the data reaches the bug</h2>
+    <p class="lead">MongoDB data changes flow through Change Streams → Pulsar → ClickHouse sync consumer, eventually hitting the broken dedup function.</p>
+
+    <div class="flow">
+      <div class="fnode blue">
+        <div class="fl">Origin</div>
+        <div class="ft">MongoDB Transaction Save</div>
+        <div class="fd">e.g. <code>SUBMIT_UNCLAIMED_DEPOSIT</code> — a transaction type that has <strong>no proposalId</strong></div>
+      </div>
+      <div class="farrow"></div>
+      <div class="fnode">
+        <div class="fl">Change Stream</div>
+        <div class="ft">Detects insert/update → checks COLLECTION_FILTERS</div>
+        <div class="fd"><code>SUBMIT_UNCLAIMED_DEPOSIT</code> is in <code>constSyncToClickhouseTransactionType</code> → passes filter</div>
+      </div>
+      <div class="farrow"></div>
+      <div class="fnode">
+        <div class="fl">Message Queue</div>
+        <div class="ft">Pulsar message sent: <code>{ _id, syncTableName: 'transaction' }</code></div>
+        <div class="fd">Consumer polls every <code>5 seconds</code>, batch receives up to 10,000 messages</div>
+      </div>
+      <div class="farrow"></div>
+      <div class="fnode amber">
+        <div class="fl">Consumer</div>
+        <div class="ft">syncClickhousePluginConsumer → processBatch()</div>
+        <div class="fd">Messages are <strong>acknowledged immediately</strong> (before processing) → groups by <code>syncTableName</code></div>
+      </div>
+      <div class="farrow"></div>
+      <div class="fnode">
+        <div class="fl">processBatch</div>
+        <div class="ft">Deduplicate → MongoDB.find() → populate → map to ClickHouse format</div>
+        <div class="fd">Multiple docs have the <strong>same <code>completeTime</code></strong> within the same second + <strong>empty <code>proposalId</code></strong></div>
+      </div>
+      <div class="farrow red"></div>
+      <div class="fnode red">
+        <div class="fl">💀 The Bug</div>
+        <div class="ft">syncTableName === 'transaction' → fixDuplicateTimestamps()</div>
+        <div class="fd">This function enters an <strong style="color:var(--red)">infinite synchronous while loop</strong> that freezes the entire Pod</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 2. THE INFINITE LOOP ===== -->
+  <div class="section">
+    <div class="badge b-red">THE BUG</div>
+    <h2>Why it loops forever</h2>
+    <p class="lead">Three conditions combine to create an unbreakable cycle: duplicate timestamps, a guard clause that blocks the fix, and a return value that always says "retry".</p>
+
+    <div class="loop-box">
+      <div class="loop-step">
+        <span class="ls-num red">1</span>
+        <h4>Detect duplicate completeTime</h4>
+        <p>Multiple docs share the same timestamp down to the millisecond:</p>
+        <div class="code-inline">
+          doc[0].completeTime = <span style="color:#4ade80">"2026-02-24 10:43:35.471"</span><br>
+          doc[1].completeTime = <span style="color:#4ade80">"2026-02-24 10:43:35.471"</span> <span style="color:var(--red)">← duplicate!</span><br>
+          doc[2].completeTime = <span style="color:#4ade80">"2026-02-24 10:43:35.471"</span> <span style="color:var(--red)">← duplicate!</span><br>
+          <br>
+          duplicates = [1, 2, ...] <span style="color:var(--amber)">← found duplicates</span>
+        </div>
+      </div>
+
+      <div class="loop-step">
+        <span class="ls-num amber">2</span>
+        <h4>Attempt to fix — but guard clause blocks it</h4>
+        <p>The fix only runs if <code>proposalId</code> exists. But <code>SUBMIT_UNCLAIMED_DEPOSIT</code> has <strong>no proposalId</strong>:</p>
+        <div class="code-inline">
+          <span style="color:#c084fc">if</span> (originalDoc.<span style="color:#60a5fa">proposalId</span> || originalDoc.<span style="color:#60a5fa">proposalID</span>) {<br>
+          &nbsp;&nbsp;<span style="color:#475569">// proposalId = null/undefined/''</span><br>
+          &nbsp;&nbsp;<span style="color:#475569">// proposalID = undefined</span><br>
+          &nbsp;&nbsp;<span style="color:var(--red)">// ⛔ condition is FALSE → completeTime is NEVER modified</span><br>
+          }
+        </div>
+      </div>
+
+      <div class="loop-step">
+        <span class="ls-num red">3</span>
+        <h4>Return true anyway</h4>
+        <p>Despite fixing nothing, the function checks <code>duplicates.length > 0</code> and returns <code style="color:var(--red)">true</code>.</p>
+        <div class="code-inline">
+          <span style="color:#c084fc">return</span> duplicates.length > <span style="color:#f97316">0</span>; <span style="color:var(--amber)">// still true — nothing was fixed!</span>
+        </div>
+      </div>
+
+      <div class="loop-back">
+        <span>↩ while(true) → back to Step 1 → forever</span>
+      </div>
+    </div>
+
+    <div class="callout callout-red" style="margin-top:24px;">
+      <strong>Result:</strong> iteration goes 1 → 2 → 3 → ... → 358,590 → ... → ∞.<br>
+      The <code>while</code> loop is <strong>synchronous</strong> — it blocks the Node.js event loop entirely. The Pod freezes.
+    </div>
+  </div>
+
+  <!-- ===== 3. WHY TIMEOUT DOESN'T SAVE US ===== -->
+  <div class="section">
+    <div class="badge b-amber">EVENT LOOP</div>
+    <h2>Why the timeout guard doesn't work</h2>
+    <p class="lead">The scheduler has a <code>setTimeout(180s)</code> timeout protection, but it can never fire because the synchronous while loop blocks the event loop.</p>
+
+    <div class="evloop">
+      <div class="evloop-box stack">
+        <h4>Call Stack (blocked)</h4>
+        <p>
+          <code>while()</code> ← sync infinite loop<br>
+          <code>fixDuplicateTimestamps()</code><br>
+          <code>while() check</code><br>
+          <code>fixDuplicateTimestamps()</code><br>
+          ... forever ...
+        </p>
+        <p style="margin-top:10px;color:var(--red);font-weight:600;font-size:.78rem;">Never exits → event loop stuck</p>
+      </div>
+      <div class="evloop-mid">✕</div>
+      <div class="evloop-box timer">
+        <h4>Timer Queue (waiting)</h4>
+        <p>
+          <code>setTimeout(180s)</code><br>
+          "Exceed Execution Timeout"<br>
+        </p>
+        <p style="margin-top:10px;font-weight:600;font-size:.78rem;">Can never execute — event loop is blocked</p>
+      </div>
+    </div>
+
+    <div class="callout callout-amber" style="margin-top:20px;">
+      <strong>Node.js fundamentals:</strong> <code>setTimeout</code> callbacks are placed in the Timer Queue. They can only run when the Call Stack is empty. A synchronous <code>while(true)</code> never yields — so the timer <strong>never fires</strong>.
+    </div>
+  </div>
+
+  <!-- ===== 4. IMPACT ===== -->
+  <div class="section">
+    <div class="badge b-red">IMPACT</div>
+    <h2>What happens when the Pod freezes</h2>
+
+    <div class="impacts">
+      <div class="impact-card">
+        <div class="ic-icon">🧊</div>
+        <div class="ic-text"><strong>Pod completely frozen</strong><br>No requests can be processed</div>
+      </div>
+      <div class="impact-card">
+        <div class="ic-icon">📨</div>
+        <div class="ic-text"><strong>Pulsar messages stuck</strong><br>Already acknowledged, can't reprocess</div>
+      </div>
+      <div class="impact-card">
+        <div class="ic-icon">📊</div>
+        <div class="ic-text"><strong>ClickHouse sync halted</strong><br>All 4 table types blocked</div>
+      </div>
+      <div class="impact-card">
+        <div class="ic-icon">💾</div>
+        <div class="ic-text"><strong>Memory leak</strong><br>iteration counter grows infinitely</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 5. BUG SUMMARY TABLE ===== -->
+  <div class="section">
+    <div class="badge b-purple">ROOT CAUSES</div>
+    <h2>Bug summary — 4 contributing factors</h2>
+
+    <table class="bug-table">
+      <thead>
+        <tr><th>Component</th><th>Problem</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color:var(--red);">Transaction Data</td>
+          <td><code>SUBMIT_UNCLAIMED_DEPOSIT</code> and similar types have <strong>no proposalId</strong> — the field is null/undefined/empty string</td>
+        </tr>
+        <tr>
+          <td style="color:var(--red);">fixDuplicateTimestamps</td>
+          <td><code>if (proposalId)</code> guard skips the timestamp fix, but the function still returns <code>true</code> (duplicates found). Fix is never applied, but caller thinks it should retry.</td>
+        </tr>
+        <tr>
+          <td style="color:var(--red);">while loop</td>
+          <td>No max iteration limit. It's a <strong>synchronous</strong> blocking loop — blocks the entire Node.js event loop.</td>
+        </tr>
+        <tr>
+          <td style="color:var(--amber);">schedulerHelper</td>
+          <td><code>setTimeout</code> timeout guard can never fire because the synchronous while loop never yields control back to the event loop.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 6. THE FIX ===== -->
+  <div class="section">
+    <div class="badge b-green">THE FIX</div>
+    <h2>Solution: fixDuplicateTimestampsGuaranteed</h2>
+    <p class="lead">Replace the retry-based approach with a single-pass O(n) algorithm that guarantees unique timestamps without any loop.</p>
+
+    <div class="fix-grid">
+      <div class="fix-card old">
+        <div class="fc-label">Before — fixDuplicateTimestamps</div>
+        <h4>Retry loop (broken)</h4>
+        <ul>
+          <li>while loop retries until no duplicates</li>
+          <li>Depends on proposalId to modify timestamps</li>
+          <li>Returns true even when nothing is fixed</li>
+          <li>Synchronous — blocks event loop</li>
+          <li>No max iteration guard</li>
+        </ul>
+      </div>
+      <div class="fix-card new">
+        <div class="fc-label">After — fixDuplicateTimestampsGuaranteed</div>
+        <h4>Single pass O(n)</h4>
+        <ul>
+          <li>No loop — single traversal of all docs</li>
+          <li>Does NOT depend on proposalId</li>
+          <li>Groups by base second, assigns unique ms (0..999)</li>
+          <li>Overflows to next second if >1000 per group</li>
+          <li>Mathematically guaranteed unique — impossible to deadloop</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="codeblock" style="margin-top:20px;">
+      <span class="cm">// New algorithm — O(n), no retry, no proposalId dependency</span><br><br>
+      <span class="hl-green"><span class="kw">function</span> <span class="fn">fixDuplicateTimestampsGuaranteed</span>(mappedDocs, processId) {</span>
+      <span class="hl-green">&nbsp;&nbsp;<span class="kw">const</span> groups = <span class="kw">new</span> <span class="fn">Map</span>();  <span class="cm">// group by base second</span></span>
+      <br>
+      <span class="hl-green">&nbsp;&nbsp;mappedDocs.<span class="fn">forEach</span>((doc, index) => {</span>
+      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> baseSecond = doc.completeTime.<span class="fn">substring</span>(<span class="num">0</span>, <span class="num">19</span>);</span>
+      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;groups.<span class="fn">get</span>(baseSecond)?.<span class="fn">push</span>(index) ?? groups.<span class="fn">set</span>(baseSecond, [index]);</span>
+      <span class="hl-green">&nbsp;&nbsp;});</span>
+      <br>
+      <span class="hl-green">&nbsp;&nbsp;<span class="kw">for</span> (<span class="kw">const</span> [baseSecond, indices] <span class="kw">of</span> groups) {</span>
+      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;indices.<span class="fn">forEach</span>((docIndex, slot) => {</span>
+      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> extraSeconds = Math.<span class="fn">floor</span>(slot / <span class="num">1000</span>);</span>
+      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">const</span> ms = slot % <span class="num">1000</span>;  <span class="cm">// unique ms per doc</span></span>
+      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;mappedDocs[docIndex].completeTime = <span class="str">`${adjustedBase}.${ms}`</span>;</span>
+      <span class="hl-green">&nbsp;&nbsp;&nbsp;&nbsp;});</span>
+      <span class="hl-green">&nbsp;&nbsp;}</span>
+      <span class="hl-green">}</span>
+    </div>
+
+    <div class="callout callout-green" style="margin-top:16px;">
+      <strong>Why this can never deadloop:</strong> There is no while/retry. Each doc gets assigned slot 0, 1, 2, ... within its second group. Slot → unique millisecond. If a second has >1000 docs, extra seconds are allocated. One pass, guaranteed unique, O(n).
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">PMS Engineering · Post-Mortem · Feb 2026</div>
+
+</body>
+</html>
