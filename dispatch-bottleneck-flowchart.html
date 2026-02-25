@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>派卡瓶颈分析 &amp; 优化方案</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --red: #ef4444;
+    --red-bg: rgba(239,68,68,.12);
+    --green: #22c55e;
+    --green-bg: rgba(34,197,94,.12);
+    --blue: #3b82f6;
+    --blue-bg: rgba(59,130,246,.12);
+    --orange: #f97316;
+    --orange-bg: rgba(249,115,22,.12);
+    --purple: #a855f7;
+    --yellow: #eab308;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background:var(--bg); color:var(--text); line-height:1.6; }
+
+  .container { max-width:1100px; margin:0 auto; padding:40px 24px 80px; }
+
+  h1 { font-size:2rem; font-weight:700; text-align:center; margin-bottom:8px; }
+  .subtitle { text-align:center; color:var(--muted); font-size:.95rem; margin-bottom:48px; }
+
+  /* Section */
+  .section { margin-bottom:56px; }
+  .section-title { font-size:1.25rem; font-weight:600; margin-bottom:20px; display:flex; align-items:center; gap:10px; }
+  .section-title .badge { font-size:.7rem; padding:3px 10px; border-radius:20px; font-weight:600; letter-spacing:.5px; }
+  .badge-red { background:var(--red-bg); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+  .badge-green { background:var(--green-bg); color:var(--green); border:1px solid rgba(34,197,94,.3); }
+  .badge-blue { background:var(--blue-bg); color:var(--blue); border:1px solid rgba(59,130,246,.3); }
+
+  /* Flow */
+  .flow { display:flex; flex-direction:column; align-items:center; gap:0; }
+  .flow-node { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 24px; width:100%; max-width:620px; position:relative; }
+  .flow-node.highlight-red { border-color:var(--red); box-shadow:0 0 20px rgba(239,68,68,.15); }
+  .flow-node.highlight-green { border-color:var(--green); box-shadow:0 0 20px rgba(34,197,94,.15); }
+  .flow-node.highlight-blue { border-color:var(--blue); box-shadow:0 0 20px rgba(59,130,246,.15); }
+  .flow-node .node-label { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .flow-node .node-title { font-weight:600; font-size:1rem; }
+  .flow-node .node-desc { color:var(--muted); font-size:.85rem; margin-top:4px; }
+  .flow-node code { background:rgba(255,255,255,.08); padding:1px 6px; border-radius:4px; font-size:.82rem; }
+
+  .flow-arrow { width:2px; height:28px; background:var(--border); position:relative; }
+  .flow-arrow::after { content:''; position:absolute; bottom:-4px; left:50%; transform:translateX(-50%); border-left:5px solid transparent; border-right:5px solid transparent; border-top:6px solid var(--border); }
+  .flow-arrow.red { background:var(--red); }
+  .flow-arrow.red::after { border-top-color:var(--red); }
+  .flow-arrow.green { background:var(--green); }
+  .flow-arrow.green::after { border-top-color:var(--green); }
+
+  /* Loop visual */
+  .loop-wrapper { position:relative; width:100%; max-width:620px; }
+  .loop-bracket { position:absolute; top:0; bottom:0; right:-36px; width:24px; border:2px solid var(--red); border-left:none; border-radius:0 12px 12px 0; }
+  .loop-bracket-label { position:absolute; right:-110px; top:50%; transform:translateY(-50%) rotate(0deg); color:var(--red); font-size:.75rem; font-weight:600; white-space:nowrap; writing-mode:vertical-rl; letter-spacing:1px; }
+
+  /* Comparison */
+  .compare { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:16px; }
+  @media(max-width:700px){ .compare { grid-template-columns:1fr; } }
+  .compare-card { background:var(--surface); border-radius:12px; padding:24px; border:1px solid var(--border); }
+  .compare-card.old { border-color:var(--red); }
+  .compare-card.new { border-color:var(--green); }
+  .compare-card h3 { font-size:1rem; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+  .compare-card .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .dot-red { background:var(--red); }
+  .dot-green { background:var(--green); }
+
+  /* Timeline */
+  .timeline { display:flex; align-items:center; gap:2px; margin:10px 0; height:28px; border-radius:6px; overflow:hidden; }
+  .timeline .slot { flex:1; height:100%; display:flex; align-items:center; justify-content:center; font-size:.6rem; font-weight:600; color:#fff; min-width:0; }
+  .slot-seq { background:var(--red); opacity:.7; }
+  .slot-par { opacity:.85; }
+  .slot-idle { background:var(--border); opacity:.4; }
+  .colors-cycle .slot-par:nth-child(10n+1){ background:#3b82f6; }
+  .colors-cycle .slot-par:nth-child(10n+2){ background:#8b5cf6; }
+  .colors-cycle .slot-par:nth-child(10n+3){ background:#06b6d4; }
+  .colors-cycle .slot-par:nth-child(10n+4){ background:#22c55e; }
+  .colors-cycle .slot-par:nth-child(10n+5){ background:#f97316; }
+  .colors-cycle .slot-par:nth-child(10n+6){ background:#ec4899; }
+  .colors-cycle .slot-par:nth-child(10n+7){ background:#14b8a6; }
+  .colors-cycle .slot-par:nth-child(10n+8){ background:#a855f7; }
+  .colors-cycle .slot-par:nth-child(10n+9){ background:#eab308; }
+  .colors-cycle .slot-par:nth-child(10n+10){ background:#6366f1; }
+
+  /* Stats */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-top:20px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; text-align:center; }
+  .stat-card .stat-value { font-size:2rem; font-weight:700; }
+  .stat-card .stat-label { color:var(--muted); font-size:.8rem; margin-top:4px; }
+  .stat-card.good .stat-value { color:var(--green); }
+  .stat-card.bad .stat-value { color:var(--red); }
+  .stat-card.neutral .stat-value { color:var(--blue); }
+
+  /* Gauge */
+  .gauge-row { display:flex; gap:32px; justify-content:center; flex-wrap:wrap; margin:32px 0; }
+  .gauge { text-align:center; }
+  .gauge svg { width:160px; height:160px; }
+  .gauge-label { font-size:.85rem; color:var(--muted); margin-top:8px; }
+  .gauge-val { font-size:1.5rem; font-weight:700; }
+
+  /* Table */
+  .config-table { width:100%; border-collapse:collapse; margin-top:16px; font-size:.88rem; }
+  .config-table th, .config-table td { padding:12px 16px; text-align:left; border-bottom:1px solid var(--border); }
+  .config-table th { color:var(--muted); font-weight:500; font-size:.75rem; text-transform:uppercase; letter-spacing:.5px; }
+  .config-table td:nth-child(2), .config-table td:nth-child(3) { text-align:right; font-variant-numeric:tabular-nums; }
+  .config-table tr:hover { background:rgba(255,255,255,.03); }
+
+  /* Code block */
+  .code-block { background:#0c1222; border:1px solid var(--border); border-radius:8px; padding:16px 20px; font-family:'SF Mono', 'Fira Code', monospace; font-size:.8rem; line-height:1.7; overflow-x:auto; margin-top:12px; }
+  .code-block .kw { color:#c084fc; }
+  .code-block .fn { color:#60a5fa; }
+  .code-block .cm { color:#64748b; }
+  .code-block .str { color:#4ade80; }
+  .code-block .num { color:#f97316; }
+  .code-block .red-line { background:rgba(239,68,68,.15); display:block; margin:0 -20px; padding:0 20px; border-left:3px solid var(--red); }
+  .code-block .green-line { background:rgba(34,197,94,.12); display:block; margin:0 -20px; padding:0 20px; border-left:3px solid var(--green); }
+
+  /* Annotation */
+  .annotation { background:var(--orange-bg); border:1px solid rgba(249,115,22,.3); border-radius:8px; padding:14px 18px; font-size:.85rem; color:var(--orange); margin-top:12px; }
+  .annotation strong { color:#fb923c; }
+
+  .safe-note { background:var(--green-bg); border:1px solid rgba(34,197,94,.3); border-radius:8px; padding:14px 18px; font-size:.85rem; color:var(--green); margin-top:12px; }
+
+  /* Parallel vis */
+  .parallel-vis { display:flex; flex-direction:column; gap:6px; margin:16px 0; }
+  .p-row { display:flex; align-items:center; gap:8px; }
+  .p-label { width:70px; font-size:.75rem; color:var(--muted); text-align:right; flex-shrink:0; }
+  .p-bar-track { flex:1; height:22px; background:rgba(255,255,255,.04); border-radius:4px; position:relative; overflow:hidden; }
+  .p-bar { height:100%; border-radius:4px; display:flex; align-items:center; padding-left:8px; font-size:.65rem; font-weight:600; color:#fff; }
+
+  hr { border:none; border-top:1px solid var(--border); margin:48px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>自动派卡 (Auto Dispatch) 瓶颈分析</h1>
+  <p class="subtitle">dispatchPaymentProposals.js &mdash; autoDistributeProposals 性能优化方案</p>
+
+  <!-- ========== SECTION 1: Architecture ========== -->
+  <div class="section">
+    <div class="section-title">
+      <span class="badge badge-blue">ARCHITECTURE</span>
+      当前系统架构
+    </div>
+
+    <div class="stats">
+      <div class="stat-card neutral">
+        <div class="stat-value">*/2s</div>
+        <div class="stat-label">Scheduler 触发频率 (每2秒)</div>
+      </div>
+      <div class="stat-card neutral">
+        <div class="stat-value">60s</div>
+        <div class="stat-label">最大执行时间</div>
+      </div>
+      <div class="stat-card neutral">
+        <div class="stat-value">6 种</div>
+        <div class="stat-label">Bank / GCash / Maya / Coinsph / Lazada / Crypto</div>
+      </div>
+    </div>
+
+    <div class="flow" style="margin-top:28px">
+      <div class="flow-node highlight-blue">
+        <div class="node-label">Scheduler (Cron)</div>
+        <div class="node-title">distributeGcashProposals / distributePaymentProposals / ...</div>
+        <div class="node-desc">每 <code>2秒</code> 触发，执行上限 <code>60秒</code></div>
+      </div>
+      <div class="flow-arrow"></div>
+      <div class="flow-node">
+        <div class="node-label">Step 1 - 查询</div>
+        <div class="node-title">_getActiveProposal(company, type)</div>
+        <div class="node-desc">MongoDB 查询 status=VERIFIED, fromCard=null 的待处理提案，按 priority + createdAt 排序</div>
+      </div>
+      <div class="flow-arrow"></div>
+      <div class="flow-node">
+        <div class="node-label">Step 2 - 缓存</div>
+        <div class="node-title">_getSettingFromRedis(company)</div>
+        <div class="node-desc">从 Redis 获取大额付款阈值设置 (largePaymentSetting)</div>
+      </div>
+      <div class="flow-arrow red"></div>
+      <div class="flow-node highlight-red">
+        <div class="node-label">Step 3 - 瓶颈</div>
+        <div class="node-title">for (const proposal of activeProposal) { ... }</div>
+        <div class="node-desc">逐一串行处理每笔提案 → 调用 dispatchPaymentProposal()</div>
+      </div>
+      <div class="flow-arrow"></div>
+      <div class="flow-node">
+        <div class="node-label">Per Proposal</div>
+        <div class="node-title">dispatchPaymentProposal()</div>
+        <div class="node-desc">查玩家 → 找空闲商户卡 → 匹配最佳卡 → 发送付款请求 (约 <strong style="color:var(--orange)">20ms / 笔</strong>)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 2: Bottleneck ========== -->
+  <div class="section">
+    <div class="section-title">
+      <span class="badge badge-red">BOTTLENECK</span>
+      瓶颈分析：串行循环
+    </div>
+
+    <div class="compare">
+      <div class="compare-card old">
+        <h3><span class="dot dot-red"></span> 当前 — 串行处理 (Sequential)</h3>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px;">
+          每笔提案必须等上一笔完成后才开始处理
+        </p>
+        <div class="timeline">
+          <div class="slot slot-seq">P1</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P2</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P3</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P4</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P5</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P6</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P7</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P8</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P9</div>
+          <div class="slot slot-idle"></div>
+          <div class="slot slot-seq">P10</div>
+        </div>
+        <p style="font-size:.78rem;color:var(--muted);text-align:center;">⬆ 1次只处理1笔，CPU 大量空等 I/O</p>
+      </div>
+      <div class="compare-card new">
+        <h3><span class="dot dot-green"></span> 优化后 — 并发处理 (Concurrent)</h3>
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px;">
+          同时处理 N 笔提案 (N = 可配置的并发数)
+        </p>
+        <div class="timeline colors-cycle">
+          <div class="slot slot-par">P1</div>
+          <div class="slot slot-par">P2</div>
+          <div class="slot slot-par">P3</div>
+          <div class="slot slot-par">P4</div>
+          <div class="slot slot-par">P5</div>
+          <div class="slot slot-par">P6</div>
+          <div class="slot slot-par">P7</div>
+          <div class="slot slot-par">P8</div>
+          <div class="slot slot-par">P9</div>
+          <div class="slot slot-par">P10</div>
+        </div>
+        <p style="font-size:.78rem;color:var(--muted);text-align:center;">⬆ 10笔同时处理，充分利用异步 I/O</p>
+      </div>
+    </div>
+
+    <div class="annotation" style="margin-top:20px;">
+      <strong>为什么是 I/O 瓶颈而不是 CPU 瓶颈？</strong><br>
+      每笔 20ms 中，大部分时间花在等待 MongoDB 查询 和 HTTP 请求 (商户 API)。
+      Node.js 单线程在 <code>await</code> 等待时完全空闲，串行循环让这些等待时间无法重叠。
+    </div>
+
+    <!-- Parallel worker visualization -->
+    <div style="margin-top:28px;">
+      <h4 style="font-size:.9rem;color:var(--muted);margin-bottom:12px;">串行 vs 并发 — 同一时间段内的处理对比</h4>
+      <div class="parallel-vis">
+        <div class="p-row">
+          <div class="p-label">串行</div>
+          <div class="p-bar-track">
+            <div class="p-bar" style="width:3.3%;background:var(--red);">1笔</div>
+          </div>
+        </div>
+        <div class="p-row">
+          <div class="p-label" style="color:var(--green)">并发×10</div>
+          <div class="p-bar-track">
+            <div class="p-bar" style="width:33%;background:var(--green);">10笔同时</div>
+          </div>
+        </div>
+        <div class="p-row">
+          <div class="p-label" style="color:var(--blue)">并发×20</div>
+          <div class="p-bar-track">
+            <div class="p-bar" style="width:66%;background:var(--blue);">20笔同时</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 3: Numbers ========== -->
+  <div class="section">
+    <div class="section-title">
+      <span class="badge badge-red">NUMBERS</span>
+      性能数据
+    </div>
+
+    <div class="gauge-row">
+      <div class="gauge">
+        <svg viewBox="0 0 160 160">
+          <circle cx="80" cy="80" r="65" fill="none" stroke="#1e293b" stroke-width="14"/>
+          <circle cx="80" cy="80" r="65" fill="none" stroke="var(--red)" stroke-width="14"
+            stroke-dasharray="408.4" stroke-dashoffset="365" stroke-linecap="round"
+            transform="rotate(-90 80 80)" opacity=".8"/>
+          <text x="80" y="72" text-anchor="middle" fill="var(--red)" font-size="22" font-weight="700">~3K</text>
+          <text x="80" y="92" text-anchor="middle" fill="var(--muted)" font-size="11">/分钟</text>
+        </svg>
+        <div class="gauge-label">当前吞吐量 (串行)</div>
+      </div>
+      <div class="gauge">
+        <svg viewBox="0 0 160 160">
+          <circle cx="80" cy="80" r="65" fill="none" stroke="#1e293b" stroke-width="14"/>
+          <circle cx="80" cy="80" r="65" fill="none" stroke="var(--green)" stroke-width="14"
+            stroke-dasharray="408.4" stroke-dashoffset="0" stroke-linecap="round"
+            transform="rotate(-90 80 80)" opacity=".8"/>
+          <text x="80" y="72" text-anchor="middle" fill="var(--green)" font-size="22" font-weight="700">~30K</text>
+          <text x="80" y="92" text-anchor="middle" fill="var(--muted)" font-size="11">/分钟</text>
+        </svg>
+        <div class="gauge-label">优化后吞吐量 (并发×10)</div>
+      </div>
+    </div>
+
+    <table class="config-table">
+      <thead>
+        <tr>
+          <th>并发数 (DISPATCH_CONCURRENCY)</th>
+          <th>每分钟处理量</th>
+          <th>对比当前提升</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>1</code> (当前串行)</td>
+          <td style="color:var(--red)">~3,000</td>
+          <td style="color:var(--muted)">baseline</td>
+        </tr>
+        <tr>
+          <td><code>5</code></td>
+          <td>~15,000</td>
+          <td style="color:var(--yellow)">5x</td>
+        </tr>
+        <tr style="background:rgba(34,197,94,.06);">
+          <td><code>10</code> (默认推荐)</td>
+          <td style="color:var(--green);font-weight:600;">~30,000</td>
+          <td style="color:var(--green);font-weight:600;">10x</td>
+        </tr>
+        <tr>
+          <td><code>15</code></td>
+          <td>~45,000</td>
+          <td style="color:var(--green)">15x</td>
+        </tr>
+        <tr>
+          <td><code>20</code></td>
+          <td>~60,000</td>
+          <td style="color:var(--green)">20x</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="annotation">
+      <strong>需求：</strong>高峰期可达 <strong>30,000 笔/分钟</strong>。当前串行处理最多 ~3,000 笔/分钟，远远不够。<br>
+      并发数设为 <strong>10</strong> 即可满足，同时为商户 API 留有余量。
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ========== SECTION 4: Solution ========== -->
+  <div class="section">
+    <div class="section-title">
+      <span class="badge badge-green">SOLUTION</span>
+      优化方案：p-limit 并发池
+    </div>
+
+    <div class="flow">
+      <div class="flow-node highlight-blue">
+        <div class="node-label">Scheduler 触发</div>
+        <div class="node-title">每 2秒 → autoDistributeProposals()</div>
+        <div class="node-desc">查询待处理提案 + 获取 Redis 配置 (不变)</div>
+      </div>
+      <div class="flow-arrow green"></div>
+      <div class="flow-node highlight-green">
+        <div class="node-label">核心改动</div>
+        <div class="node-title">pLimit(DISPATCH_CONCURRENCY) 并发控制池</div>
+        <div class="node-desc">
+          使用 <code>p-limit</code> 库限制同时执行的异步任务数量。<br>
+          所有提案同时提交到队列，但最多只有 N 笔同时执行。
+        </div>
+      </div>
+      <div class="flow-arrow green"></div>
+
+      <div class="flow-node" style="border-color:var(--purple);">
+        <div class="node-label">并发执行</div>
+        <div class="node-title">Promise.allSettled(tasks)</div>
+        <div class="node-desc">
+          <div class="parallel-vis" style="margin:8px 0 4px;">
+            <div class="p-row">
+              <div class="p-label">Worker 1</div>
+              <div class="p-bar-track"><div class="p-bar" style="width:80%;background:#3b82f6;">P1 → P11 → P21 → ...</div></div>
+            </div>
+            <div class="p-row">
+              <div class="p-label">Worker 2</div>
+              <div class="p-bar-track"><div class="p-bar" style="width:75%;background:#8b5cf6;">P2 → P12 → P22 → ...</div></div>
+            </div>
+            <div class="p-row">
+              <div class="p-label">Worker 3</div>
+              <div class="p-bar-track"><div class="p-bar" style="width:85%;background:#06b6d4;">P3 → P13 → P23 → ...</div></div>
+            </div>
+            <div class="p-row">
+              <div class="p-label">...</div>
+              <div class="p-bar-track"><div class="p-bar" style="width:70%;background:#64748b;">...</div></div>
+            </div>
+            <div class="p-row">
+              <div class="p-label">Worker 10</div>
+              <div class="p-bar-track"><div class="p-bar" style="width:78%;background:#22c55e;">P10 → P20 → P30 → ...</div></div>
+            </div>
+          </div>
+          每个 Worker 完成一笔后自动取下一笔，保持池满载运行
+        </div>
+      </div>
+      <div class="flow-arrow green"></div>
+      <div class="flow-node highlight-green">
+        <div class="node-label">安全保护</div>
+        <div class="node-title">stopTime / isShuttingDown 检查</div>
+        <div class="node-desc">每笔开始前检查，超时或关机时设置 <code>stopped=true</code>，队列中剩余任务立即跳过</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 5: Code Diff ========== -->
+  <div class="section">
+    <div class="section-title">
+      <span class="badge badge-green">CODE</span>
+      代码变更 (Before → After)
+    </div>
+
+    <div class="code-block">
+      <span class="cm">// ❌ BEFORE: 串行循环</span><br>
+      <span class="red-line"><span class="kw">for</span> (<span class="kw">const</span> proposal <span class="kw">of</span> activeProposal) {</span>
+      <span class="red-line">&nbsp;&nbsp;<span class="kw">await</span> <span class="fn">dispatchPaymentProposal</span>({proposal, ...});</span>
+      <span class="red-line">}</span>
+      <br><br>
+      <span class="cm">// ✅ AFTER: 并发池</span><br>
+      <span class="green-line"><span class="kw">const</span> concurrency = env.config().DISPATCH_CONCURRENCY || <span class="num">10</span>;</span>
+      <span class="green-line"><span class="kw">const</span> limit = <span class="fn">pLimit</span>(concurrency);</span>
+      <br>
+      <span class="green-line"><span class="kw">const</span> tasks = activeProposal.<span class="fn">map</span>(proposal => <span class="fn">limit</span>(<span class="kw">async</span> () => {</span>
+      <span class="green-line">&nbsp;&nbsp;<span class="kw">if</span> (stopped || <span class="kw">new</span> Date() >= stopTime) { stopped = <span class="kw">true</span>; <span class="kw">return</span>; }</span>
+      <span class="green-line">&nbsp;&nbsp;<span class="kw">await</span> <span class="fn">dispatchPaymentProposal</span>({proposal, ...});</span>
+      <span class="green-line">}));</span>
+      <br>
+      <span class="green-line"><span class="kw">await</span> Promise.<span class="fn">allSettled</span>(tasks);</span>
+    </div>
+  </div>
+
+  <!-- ========== SECTION 6: Safety ========== -->
+  <div class="section">
+    <div class="section-title">
+      <span class="badge badge-green">SAFETY</span>
+      安全保障
+    </div>
+
+    <div class="stats">
+      <div class="stat-card" style="text-align:left;">
+        <div style="font-size:1.2rem;margin-bottom:8px;">⏱️ 超时保护</div>
+        <div class="stat-label" style="text-align:left;">
+          每笔开始前检查 <code>stopTime</code>，超时后队列中所有未开始的任务立即取消。
+        </div>
+      </div>
+      <div class="stat-card" style="text-align:left;">
+        <div style="font-size:1.2rem;margin-bottom:8px;">🛑 优雅关机</div>
+        <div class="stat-label" style="text-align:left;">
+          检测到 <code>isShuttingDown</code> 时，正在执行的任务正常完成，未执行的跳过。
+        </div>
+      </div>
+      <div class="stat-card" style="text-align:left;">
+        <div style="font-size:1.2rem;margin-bottom:8px;">🔒 限速兼容</div>
+        <div class="stat-label" style="text-align:left;">
+          当 <code>skipPulsar + runInterval</code> 模式下，并发自动降为 <strong>1</strong>，保持 ApiRateController 限速逻辑不变。
+        </div>
+      </div>
+      <div class="stat-card" style="text-align:left;">
+        <div style="font-size:1.2rem;margin-bottom:8px;">🔧 可配置</div>
+        <div class="stat-label" style="text-align:left;">
+          <code>DISPATCH_CONCURRENCY</code> 环境变量控制并发数，无需改代码即可调整。上线后可从小值逐步调大。
+        </div>
+      </div>
+    </div>
+
+    <div class="safe-note" style="margin-top:20px;">
+      <strong>✅ 无破坏性变更：</strong>每笔提案的处理逻辑 (dispatchPaymentProposal) 完全不变。
+      仅改变调度方式：从"排队逐个等"变为"多个同时做"。各提案之间本身就是独立的 — 每笔有各自的 proposalID、玩家、金额和目标卡。
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ========== SECTION 7: Summary ========== -->
+  <div class="section">
+    <div class="section-title">
+      <span class="badge badge-blue">SUMMARY</span>
+      总结
+    </div>
+
+    <div class="compare" style="grid-template-columns:1fr 60px 1fr;">
+      <div class="compare-card old" style="text-align:center;">
+        <h3 style="justify-content:center;"><span class="dot dot-red"></span> 优化前</h3>
+        <div style="font-size:2.5rem;font-weight:700;color:var(--red);margin:16px 0;">~3K</div>
+        <div style="color:var(--muted);font-size:.85rem;">笔/分钟</div>
+        <div style="margin-top:16px;font-size:.8rem;color:var(--muted);">
+          串行处理<br>
+          20ms × 1 worker<br>
+          高峰期堆积严重
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;">
+        <span style="font-size:2rem;color:var(--green);">→</span>
+      </div>
+      <div class="compare-card new" style="text-align:center;">
+        <h3 style="justify-content:center;"><span class="dot dot-green"></span> 优化后</h3>
+        <div style="font-size:2.5rem;font-weight:700;color:var(--green);margin:16px 0;">~30K</div>
+        <div style="color:var(--muted);font-size:.85rem;">笔/分钟</div>
+        <div style="margin-top:16px;font-size:.8rem;color:var(--muted);">
+          并发处理<br>
+          20ms × 10 workers<br>
+          满足 30K 需求
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:32px;color:var(--muted);font-size:.85rem;">
+      <strong style="color:var(--green);">10× 吞吐量提升</strong> &mdash; 通过并发池，无需增加服务器资源
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
