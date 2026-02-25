@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>付款派卡系统 — 性能优化说明</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', 'Inter', -apple-system, 'PingFang SC', sans-serif;
+    background: #fafbfd;
+    color: #1a1a2e;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Hero ---- */
+  .hero {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e1b4b 100%);
+    padding: 64px 24px 56px;
+    text-align: center;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    left: -20%;
+    width: 60%;
+    height: 180%;
+    background: radial-gradient(ellipse, rgba(99,102,241,.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    right: -10%;
+    width: 50%;
+    height: 160%;
+    background: radial-gradient(ellipse, rgba(16,185,129,.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    position: relative;
+    margin-bottom: 8px;
+  }
+  .hero p {
+    font-size: 1rem;
+    color: rgba(255,255,255,.6);
+    position: relative;
+  }
+  .hero .tag {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 6px 18px;
+    border-radius: 100px;
+    background: rgba(255,255,255,.08);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.1);
+    font-size: .78rem;
+    font-weight: 500;
+    color: rgba(255,255,255,.5);
+    position: relative;
+  }
+
+  /* ---- Layout ---- */
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---- Section ---- */
+  .section { padding: 48px 0; }
+  .section + .section { border-top: 1px solid #eef0f4; }
+  .section-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 100px;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  .badge-red   { background: #fef2f2; color: #dc2626; }
+  .badge-blue  { background: #eff6ff; color: #2563eb; }
+  .badge-green { background: #f0fdf4; color: #16a34a; }
+  .badge-amber { background: #fffbeb; color: #d97706; }
+  .badge-violet{ background: #f5f3ff; color: #7c3aed; }
+
+  .section h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    margin-bottom: 6px;
+  }
+  .section .lead {
+    font-size: .95rem;
+    color: #64748b;
+    margin-bottom: 28px;
+    max-width: 640px;
+  }
+
+  /* ---- Analogy cards ---- */
+  .duo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media(max-width:640px) { .duo { grid-template-columns:1fr; } }
+
+  .acard {
+    border-radius: 20px;
+    padding: 32px 28px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .acard.bad {
+    background: linear-gradient(160deg, #fff5f5 0%, #fef2f2 100%);
+    border: 1px solid #fecaca;
+  }
+  .acard.good {
+    background: linear-gradient(160deg, #f0fdf9 0%, #f0fdf4 100%);
+    border: 1px solid #bbf7d0;
+  }
+  .acard-emoji { font-size: 2.8rem; margin-bottom: 14px; }
+  .acard-sup {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .acard.bad .acard-sup  { color: #ef4444; }
+  .acard.good .acard-sup { color: #16a34a; }
+  .acard h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+  .acard p  { font-size: .88rem; color: #64748b; line-height: 1.7; }
+  .acard strong.red   { color: #dc2626; }
+  .acard strong.green { color: #16a34a; }
+
+  /* ---- Timeline viz ---- */
+  .viz-box {
+    background: #fff;
+    border: 1px solid #e8ecf2;
+    border-radius: 20px;
+    padding: 28px 28px 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.03);
+  }
+  .viz-label {
+    font-size: .75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 38px;
+    margin-bottom: 6px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .bar-cell {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .68rem;
+    font-weight: 700;
+    color: #fff;
+    flex: 1;
+    min-width: 0;
+    border-radius: 4px;
+  }
+  .cell-work { background: #ef4444; }
+  .cell-idle { background: #f1f5f9; }
+  .viz-caption {
+    text-align: center;
+    font-size: .78rem;
+    color: #94a3b8;
+    margin-top: 2px;
+    margin-bottom: 20px;
+  }
+  .par-colors .bar-cell:nth-child(1) { background:#3b82f6; }
+  .par-colors .bar-cell:nth-child(2) { background:#8b5cf6; }
+  .par-colors .bar-cell:nth-child(3) { background:#06b6d4; }
+  .par-colors .bar-cell:nth-child(4) { background:#22c55e; }
+  .par-colors .bar-cell:nth-child(5) { background:#f59e0b; }
+  .par-colors .bar-cell:nth-child(6) { background:#ec4899; }
+  .par-colors .bar-cell:nth-child(7) { background:#14b8a6; }
+  .par-colors .bar-cell:nth-child(8) { background:#a855f7; }
+  .par-colors .bar-cell:nth-child(9) { background:#6366f1; }
+  .par-colors .bar-cell:nth-child(10){ background:#f43f5e; }
+
+  /* ---- Big compare ---- */
+  .compare-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 8px 0 24px;
+  }
+  .cmp-box {
+    flex: 1;
+    min-width: 200px;
+    max-width: 280px;
+    text-align: center;
+    padding: 28px 20px;
+    border-radius: 20px;
+  }
+  .cmp-box.old {
+    background: linear-gradient(160deg, #fff5f5, #fef2f2);
+    border: 1.5px solid #fecaca;
+  }
+  .cmp-box.new {
+    background: linear-gradient(160deg, #ecfdf5, #f0fdf4);
+    border: 1.5px solid #bbf7d0;
+  }
+  .cmp-label {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .cmp-box.old .cmp-label { color: #ef4444; }
+  .cmp-box.new .cmp-label { color: #16a34a; }
+  .cmp-val {
+    font-size: 2.6rem;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+  .cmp-box.old .cmp-val { color: #dc2626; }
+  .cmp-box.new .cmp-val { color: #16a34a; }
+  .cmp-unit { font-size: .82rem; color: #94a3b8; margin-top: 2px; }
+  .cmp-arrow { font-size: 1.6rem; color: #16a34a; flex-shrink: 0; }
+
+  /* ---- Callout ---- */
+  .callout {
+    border-radius: 16px;
+    padding: 18px 22px;
+    font-size: .9rem;
+    line-height: 1.7;
+  }
+  .callout-amber {
+    background: linear-gradient(135deg, #fffbeb, #fef9c3);
+    border: 1px solid #fde68a;
+    color: #92400e;
+  }
+  .callout-green {
+    background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+    border: 1px solid #bbf7d0;
+    color: #166534;
+  }
+  .callout strong { font-weight: 700; }
+
+  /* ---- Table ---- */
+  .styled-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: .88rem;
+    overflow: hidden;
+    border-radius: 16px;
+    border: 1px solid #e8ecf2;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.03);
+    margin-top: 20px;
+  }
+  .styled-table th {
+    background: #f8fafc;
+    padding: 14px 18px;
+    text-align: left;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: #94a3b8;
+    border-bottom: 1px solid #e8ecf2;
+  }
+  .styled-table td {
+    padding: 14px 18px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .styled-table tbody tr:last-child td { border-bottom: none; }
+  .styled-table td:nth-child(2) { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .styled-table td:nth-child(3) { text-align: center; font-weight: 600; }
+  .styled-table tr.hl { background: #f0fdf4; }
+  .styled-table tbody tr:hover { background: #f8fafc; }
+  .styled-table tr.hl:hover { background: #ecfdf5; }
+
+  /* ---- Steps ---- */
+  .steps { display: flex; flex-direction: column; gap: 0; position: relative; }
+  .step {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    position: relative;
+    padding-bottom: 28px;
+  }
+  .step:last-child { padding-bottom: 0; }
+  .step-line {
+    position: absolute;
+    left: 23px;
+    top: 48px;
+    bottom: 0;
+    width: 2px;
+    background: #e2e8f0;
+  }
+  .step:last-child .step-line { display: none; }
+  .step-dot {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .step-dot.blue  { background: #eff6ff; border: 1.5px solid #bfdbfe; }
+  .step-dot.green { background: #f0fdf4; border: 1.5px solid #bbf7d0; }
+  .step-body h4 { font-size: .98rem; font-weight: 700; margin-bottom: 2px; }
+  .step-body p  { font-size: .85rem; color: #64748b; }
+  .step-body .green-text { color: #16a34a; font-weight: 600; }
+
+  /* ---- Checklist ---- */
+  .checks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media(max-width:600px) { .checks { grid-template-columns:1fr; } }
+  .chk {
+    background: #fff;
+    border: 1px solid #e8ecf2;
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    box-shadow: 0 1px 3px rgba(0,0,0,.02);
+    transition: box-shadow .2s, border-color .2s;
+  }
+  .chk:hover { border-color: #c7d2de; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+  .chk-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: #f0fdf4;
+    border: 1.5px solid #bbf7d0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .85rem;
+    color: #16a34a;
+    flex-shrink: 0;
+    font-weight: 700;
+  }
+  .chk h5 { font-size: .88rem; font-weight: 600; margin-bottom: 2px; }
+  .chk p  { font-size: .8rem; color: #94a3b8; line-height: 1.55; }
+
+  /* ---- Summary box ---- */
+  .summary-card {
+    background: #fff;
+    border: 1px solid #e8ecf2;
+    border-radius: 24px;
+    padding: 44px 32px;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0,0,0,.04);
+    position: relative;
+    overflow: hidden;
+  }
+  .summary-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #22c55e, #3b82f6, #8b5cf6);
+  }
+  .summary-bottom {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #f1f5f9;
+  }
+  .summary-bottom .big { font-size: 1.15rem; font-weight: 700; color: #16a34a; margin-bottom: 6px; }
+  .summary-bottom .sub { font-size: .88rem; color: #94a3b8; max-width: 460px; margin: 0 auto; }
+
+  /* ---- Footer ---- */
+  .foot {
+    text-align: center;
+    padding: 40px 20px;
+    color: #c0c8d4;
+    font-size: .78rem;
+  }
+</style>
+</head>
+<body>
+
+<!-- ========== HERO ========== -->
+<div class="hero">
+  <h1>付款派卡系统 — 性能优化</h1>
+  <p>为什么高峰期提案处理会变慢？我们怎么解决？</p>
+  <div class="tag">PMS 技术团队 · 2026年2月</div>
+</div>
+
+<div class="wrap">
+
+  <!-- ========== 1. 问题 ========== -->
+  <div class="section">
+    <div class="section-badge badge-red">问题</div>
+    <h2>高峰期处理能力不足</h2>
+    <p class="lead">系统每 2 秒检查一次待处理的付款提案，然后逐笔派发给商户卡。但目前一次只能处理一笔，处理完才能做下一笔。</p>
+
+    <div class="duo">
+      <div class="acard bad">
+        <div class="acard-emoji">🏧</div>
+        <div class="acard-sup">目前的状况</div>
+        <h3>只有 1 个收银窗口</h3>
+        <p>
+          30,000 个客户排队<br>
+          只开了 <strong class="red">1 个窗口</strong><br>
+          每人 20 毫秒 → 1 分钟最多 <strong class="red">~3,000 人</strong><br>
+          剩余客户只能干等
+        </p>
+      </div>
+      <div class="acard good">
+        <div class="acard-emoji">🏦</div>
+        <div class="acard-sup">优化后</div>
+        <h3>同时开 10 个窗口</h3>
+        <p>
+          同样 30,000 个客户<br>
+          同时开 <strong class="green">10 个窗口</strong><br>
+          1 分钟可服务 <strong class="green">~30,000 人</strong><br>
+          高峰轻松应对
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 2. 可视化 ========== -->
+  <div class="section">
+    <div class="section-badge badge-blue">对比</div>
+    <h2>处理速度直观对比</h2>
+    <p class="lead">同一段时间内，系统能处理多少笔提案</p>
+
+    <div class="viz-box">
+      <div class="viz-label" style="color:#ef4444;">现在 — 逐笔处理</div>
+      <div class="bar-row">
+        <div class="bar-cell cell-work">P1</div>
+        <div class="bar-cell cell-idle"></div>
+        <div class="bar-cell cell-work">P2</div>
+        <div class="bar-cell cell-idle"></div>
+        <div class="bar-cell cell-work">P3</div>
+        <div class="bar-cell cell-idle"></div>
+        <div class="bar-cell cell-work">P4</div>
+        <div class="bar-cell cell-idle"></div>
+        <div class="bar-cell cell-work">P5</div>
+        <div class="bar-cell cell-idle"></div>
+      </div>
+      <div class="viz-caption">一次处理 1 笔，灰色部分 = 系统在空等</div>
+
+      <div class="viz-label" style="color:#16a34a;">优化后 — 同时处理</div>
+      <div class="bar-row par-colors">
+        <div class="bar-cell">P1</div>
+        <div class="bar-cell">P2</div>
+        <div class="bar-cell">P3</div>
+        <div class="bar-cell">P4</div>
+        <div class="bar-cell">P5</div>
+        <div class="bar-cell">P6</div>
+        <div class="bar-cell">P7</div>
+        <div class="bar-cell">P8</div>
+        <div class="bar-cell">P9</div>
+        <div class="bar-cell">P10</div>
+      </div>
+      <div class="viz-caption">同时处理 10 笔，没有空等，效率拉满</div>
+    </div>
+  </div>
+
+  <!-- ========== 3. 数据 ========== -->
+  <div class="section">
+    <div class="section-badge badge-amber">数据</div>
+    <h2>性能数据</h2>
+    <p class="lead">不同并发窗口数下的处理能力</p>
+
+    <div class="compare-strip">
+      <div class="cmp-box old">
+        <div class="cmp-label">优化前</div>
+        <div class="cmp-val">~3K</div>
+        <div class="cmp-unit">笔 / 分钟</div>
+      </div>
+      <div class="cmp-arrow">→</div>
+      <div class="cmp-box new">
+        <div class="cmp-label">优化后</div>
+        <div class="cmp-val">~30K</div>
+        <div class="cmp-unit">笔 / 分钟</div>
+      </div>
+    </div>
+
+    <div class="callout callout-amber">
+      <strong>高峰需求：</strong>忙时每分钟涌入约 <strong>30,000 笔</strong>提案。当前只能处理 ~3,000 笔 → <strong>大量堆积，玩家等待变长。</strong>
+    </div>
+
+    <table class="styled-table">
+      <thead>
+        <tr><th>方案</th><th>每分钟处理</th><th>提升</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>现在（1 个窗口）</td>
+          <td style="color:#dc2626;">~3,000</td>
+          <td style="color:#94a3b8;">—</td>
+        </tr>
+        <tr>
+          <td>5 个窗口</td>
+          <td>~15,000</td>
+          <td style="color:#d97706;">5 倍</td>
+        </tr>
+        <tr class="hl">
+          <td><strong>10 个窗口（推荐）</strong></td>
+          <td style="color:#16a34a;"><strong>~30,000</strong></td>
+          <td style="color:#16a34a;"><strong>10 倍</strong></td>
+        </tr>
+        <tr>
+          <td>15 个窗口</td>
+          <td>~45,000</td>
+          <td style="color:#16a34a;">15 倍</td>
+        </tr>
+        <tr>
+          <td>20 个窗口</td>
+          <td>~60,000</td>
+          <td style="color:#16a34a;">20 倍</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========== 4. 方案 ========== -->
+  <div class="section">
+    <div class="section-badge badge-green">方案</div>
+    <h2>我们怎么优化</h2>
+    <p class="lead">核心思路很简单：从"一次一笔"变成"多笔同时做"</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-dot blue">📋</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>获取待处理提案</h4>
+          <p>系统照常查询所有等待派卡的提案列表 — <strong>这步不变</strong></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-dot green">🚀</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4 class="green-text">同时开启多个"窗口"处理</h4>
+          <p>不再排队等待，而是 <strong>同时派发 10 笔提案到商户卡</strong> — 这是唯一的改动</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-dot blue">✅</div>
+        <div class="step-body">
+          <h4>每笔提案的处理流程</h4>
+          <p>找玩家 → 匹配商户卡 → 发送付款请求 — <strong>这些步骤完全不变</strong></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-green" style="margin-top:24px;">
+      <strong>类比：</strong>好比银行高峰期，之前只开了 1 个柜台，现在同时开 10 个柜台。每个柜台的办理流程完全一样，只是同时服务的人更多了。
+    </div>
+  </div>
+
+  <!-- ========== 5. 安全 ========== -->
+  <div class="section">
+    <div class="section-badge badge-violet">安全</div>
+    <h2>安全保障</h2>
+    <p class="lead">只改变了"多少笔一起做"，不改变每笔提案的处理方式</p>
+
+    <div class="checks">
+      <div class="chk">
+        <div class="chk-icon">✓</div>
+        <div>
+          <h5>处理逻辑不变</h5>
+          <p>匹配规则、找卡逻辑、付款流程完全不变，只是多笔同时进行</p>
+        </div>
+      </div>
+      <div class="chk">
+        <div class="chk-icon">✓</div>
+        <div>
+          <h5>超时自动停止</h5>
+          <p>到达时间限制时，未开始的提案自动跳过，不会超时运行</p>
+        </div>
+      </div>
+      <div class="chk">
+        <div class="chk-icon">✓</div>
+        <div>
+          <h5>更新不中断</h5>
+          <p>系统更新时，正在处理的提案正常完成，不会丢失或重复</p>
+        </div>
+      </div>
+      <div class="chk">
+        <div class="chk-icon">✓</div>
+        <div>
+          <h5>窗口数可调</h5>
+          <p>并发数随时调整，不需要重新发版，可根据实际情况逐步增加</p>
+        </div>
+      </div>
+      <div class="chk">
+        <div class="chk-icon">✓</div>
+        <div>
+          <h5>无需加服务器</h5>
+          <p>充分利用现有服务器能力（原来在空等，现在不空等了）</p>
+        </div>
+      </div>
+      <div class="chk">
+        <div class="chk-icon">✓</div>
+        <div>
+          <h5>提案相互独立</h5>
+          <p>每笔有各自的玩家、金额和目标卡，互不影响</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 6. 总结 ========== -->
+  <div class="section" style="border-top:none;padding-top:0;">
+    <div class="summary-card">
+      <div class="compare-strip" style="margin-bottom:0;">
+        <div class="cmp-box old">
+          <div class="cmp-label">优化前</div>
+          <div class="cmp-val">~3,000</div>
+          <div class="cmp-unit">笔 / 分钟</div>
+        </div>
+        <div class="cmp-arrow">→</div>
+        <div class="cmp-box new">
+          <div class="cmp-label">优化后</div>
+          <div class="cmp-val">~30,000</div>
+          <div class="cmp-unit">笔 / 分钟</div>
+        </div>
+      </div>
+      <div class="summary-bottom">
+        <div class="big">处理速度提升 10 倍</div>
+        <div class="sub">
+          高峰期 30,000 笔/分钟的需求可以轻松应对。<br>
+          不改变处理流程，不增加服务器，无风险。
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">PMS 技术团队 · 2026年2月</div>
+
+</body>
+</html>
