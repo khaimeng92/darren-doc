@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Automated Reconciliation System V3 — Technical Proposal</title>
+  <style>
+    :root {
+      --blue: #1a6cf8;
+      --blue-light: #e8f0fe;
+      --green: #0f9d58;
+      --green-light: #e6f4ea;
+      --orange: #f29900;
+      --orange-light: #fef9e7;
+      --purple: #7b2ff7;
+      --purple-light: #f3e8fd;
+      --gray: #5f6368;
+      --gray-light: #f8f9fa;
+      --border: #e0e0e0;
+      --text: #202124;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4ff;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a6cf8 0%, #7b2ff7 100%);
+      color: white;
+      padding: 60px 40px 50px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    header .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 20px;
+      padding: 4px 16px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+    }
+    header h1 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    header p {
+      font-size: 16px;
+      opacity: 0.85;
+    }
+    header .meta {
+      margin-top: 20px;
+      font-size: 13px;
+      opacity: 0.7;
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    /* ── Section ── */
+    section {
+      background: white;
+      border-radius: 16px;
+      padding: 36px 40px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    section h2 .icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    /* ── Goals ── */
+    .goals {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 8px;
+    }
+    .goal-card {
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+    .goal-card .emoji { font-size: 28px; margin-bottom: 8px; }
+    .goal-card strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    .goal-card p { font-size: 13px; color: var(--gray); }
+
+    /* ── Flow ── */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 8px 0;
+      flex-wrap: wrap;
+    }
+    .flow-step {
+      flex: 1;
+      min-width: 140px;
+      border-radius: 12px;
+      padding: 18px 16px;
+      text-align: center;
+    }
+    .flow-step .step-num {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      opacity: 0.6;
+      margin-bottom: 6px;
+    }
+    .flow-step .step-icon { font-size: 26px; margin-bottom: 6px; }
+    .flow-step strong { display: block; font-size: 14px; }
+    .flow-step p { font-size: 12px; color: var(--gray); margin-top: 4px; }
+    .flow-arrow {
+      font-size: 20px;
+      color: #bbb;
+      padding: 0 4px;
+      flex-shrink: 0;
+    }
+
+    /* ── Modules ── */
+    .module {
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .module h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .module .subtitle {
+      font-size: 13px;
+      color: var(--gray);
+      margin-bottom: 14px;
+    }
+    .module ul { padding-left: 18px; }
+    .module ul li {
+      font-size: 14px;
+      margin-bottom: 6px;
+      color: #444;
+    }
+    .module .tags {
+      margin-top: 14px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      display: inline-block;
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .mod-a { background: var(--blue-light); }
+    .mod-a h3 { color: var(--blue); }
+    .mod-a .tag { background: #c8dcfd; color: var(--blue); }
+
+    .mod-b { background: var(--green-light); }
+    .mod-b h3 { color: var(--green); }
+    .mod-b .tag { background: #b7e5cd; color: var(--green); }
+
+    .mod-c { background: var(--purple-light); }
+    .mod-c h3 { color: var(--purple); }
+    .mod-c .tag { background: #ddc8fc; color: var(--purple); }
+
+    /* ── Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    thead tr { background: var(--blue); color: white; }
+    thead th {
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 600;
+    }
+    thead th:first-child { border-radius: 8px 0 0 0; }
+    thead th:last-child  { border-radius: 0 8px 0 0; }
+    tbody tr:nth-child(even) { background: var(--gray-light); }
+    tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    tbody td:first-child { font-weight: 600; color: var(--gray); }
+    .good { color: var(--green); font-weight: 600; }
+
+    /* ── Security ── */
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-top: 8px;
+    }
+    .sec-item {
+      background: var(--gray-light);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .sec-item .sec-icon { font-size: 22px; flex-shrink: 0; }
+    .sec-item strong { display: block; font-size: 14px; margin-bottom: 3px; }
+    .sec-item p { font-size: 12px; color: var(--gray); }
+
+    /* ── Roadmap ── */
+    .roadmap {
+      position: relative;
+      padding-left: 30px;
+    }
+    .roadmap::before {
+      content: '';
+      position: absolute;
+      left: 10px; top: 10px; bottom: 10px;
+      width: 2px;
+      background: var(--border);
+    }
+    .rm-item {
+      position: relative;
+      margin-bottom: 20px;
+    }
+    .rm-item::before {
+      content: '';
+      position: absolute;
+      left: -24px; top: 6px;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+    }
+    .rm-item.pending::before  { background: var(--border); border-color: var(--border); }
+    .rm-item.waiting::before  { background: var(--orange); }
+    .rm-item strong { font-size: 15px; }
+    .rm-item p { font-size: 13px; color: var(--gray); margin-top: 2px; }
+    .rm-badge {
+      display: inline-block;
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .badge-waiting { background: var(--orange-light); color: var(--orange); }
+    .badge-pending  { background: var(--gray-light);   color: var(--gray); }
+
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: #aaa;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">INTERNAL · CONFIDENTIAL</div>
+  <h1>Automated Reconciliation System V3</h1>
+  <p>Technical &amp; Process Proposal</p>
+  <div class="meta">Version 3.0 &nbsp;·&nbsp; 27 February 2026 &nbsp;·&nbsp; Proposal Stage</div>
+</header>
+
+<main>
+
+  <!-- Background & Goals -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#e8f0fe;">🎯</span>
+      Background &amp; Goals
+    </h2>
+    <p style="color:var(--gray); margin-bottom:20px; font-size:15px;">
+      Today's reconciliation process relies entirely on manual effort — logging into multiple backends,
+      downloading transaction records, and comparing them by hand. This is slow, error-prone, and hard to audit.
+      V3 replaces that with a three-module automated pipeline.
+    </p>
+    <div class="goals">
+      <div class="goal-card" style="background:#e8f0fe;">
+        <div class="emoji">⚡</div>
+        <strong>Auto Collection</strong>
+        <p>Scheduled login to all backends; transaction data downloaded automatically</p>
+      </div>
+      <div class="goal-card" style="background:#e6f4ea;">
+        <div class="emoji">🔍</div>
+        <strong>Auto Comparison</strong>
+        <p>Deterministic script logic cross-checks three data sources with zero guesswork</p>
+      </div>
+      <div class="goal-card" style="background:#fef9e7;">
+        <div class="emoji">📲</div>
+        <strong>Instant Reporting</strong>
+        <p>Results pushed to Lark on schedule — visible to everyone, no chasing needed</p>
+      </div>
+      <div class="goal-card" style="background:#f3e8fd;">
+        <div class="emoji">🤖</div>
+        <strong>Smart Dispatch</strong>
+        <p>Plain-language commands trigger re-runs or anomaly investigations on demand</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Overall Flow -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#fef9e7;">🔄</span>
+      How It Works
+    </h2>
+    <div class="flow">
+      <div class="flow-step" style="background:#e8f0fe;">
+        <div class="step-num">STEP 1</div>
+        <div class="step-icon">🖥️</div>
+        <strong>Auto Login &amp; Download</strong>
+        <p>FPMS / PMS / Merchant Portal</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:#e6f4ea;">
+        <div class="step-num">STEP 2</div>
+        <div class="step-icon">⚙️</div>
+        <strong>Data Comparison</strong>
+        <p>Python script execution</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:#fef9e7;">
+        <div class="step-num">STEP 3</div>
+        <div class="step-icon">📩</div>
+        <strong>Push Results</strong>
+        <p>Delivered to Lark group</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:#f3e8fd;">
+        <div class="step-num">ON DEMAND</div>
+        <div class="step-icon">💬</div>
+        <strong>AI Responds</strong>
+        <p>Re-run or investigate anomalies</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Three Modules -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#e6f4ea;">🏗️</span>
+      Three-Module Architecture
+    </h2>
+
+    <div class="module mod-a">
+      <h3><span>🖥️</span> Module A — Data Collection (Automated Login &amp; Download)</h3>
+      <p class="subtitle">Simulates human browser actions to log into each backend and download transaction files on a schedule</p>
+      <ul>
+        <li>Runs on a preset schedule — fully unattended, no manual trigger needed</li>
+        <li>Logs into <strong>FPMS, PMS, and the Merchant Portal</strong></li>
+        <li>Exports transaction data for the specified date range to a local directory</li>
+        <li>Credentials stored encrypted; behaviour mirrors normal human login flows</li>
+      </ul>
+      <div class="tags">
+        <span class="tag">Scheduled</span>
+        <span class="tag">Unattended</span>
+        <span class="tag">Encrypted Credentials</span>
+      </div>
+    </div>
+
+    <div class="module mod-b">
+      <h3><span>⚙️</span> Module B — Data Comparison (Python Script)</h3>
+      <p class="subtitle">Reads downloaded files, cross-checks all three data sources, and produces a structured reconciliation report</p>
+      <ul>
+        <li>Compares amounts, counts, and timestamps across all three platforms</li>
+        <li>Flags discrepancies: amount mismatches, missing entries, duplicate records</li>
+        <li>Outputs a structured report — <em>OK / Discrepancy / Needs Review</em></li>
+        <li>Pure script logic — results are <strong>deterministic and reproducible</strong>, no AI involved</li>
+      </ul>
+      <div class="tags">
+        <span class="tag">Deterministic</span>
+        <span class="tag">Zero Error Rate</span>
+        <span class="tag">Reproducible</span>
+        <span class="tag">Low Running Cost</span>
+      </div>
+    </div>
+
+    <div class="module mod-c">
+      <h3><span>🤖</span> Module C — AI Dispatch (On-Demand Response)</h3>
+      <p class="subtitle">Listens for plain-language commands in Lark and triggers the right action — re-run, date query, or anomaly drill-down</p>
+      <ul>
+        <li>Team member spots an issue → sends a message → AI triggers a re-run instantly</li>
+        <li>Management queries a specific date or merchant → just type it in plain English</li>
+        <li>AI <strong>only orchestrates</strong> — it never touches raw transaction data</li>
+        <li>Token consumption is minimal; cost is fully predictable</li>
+      </ul>
+      <div class="tags">
+        <span class="tag">Plain Language</span>
+        <span class="tag">On-Demand</span>
+        <span class="tag">Minimal Tokens</span>
+        <span class="tag">No DB Access Needed</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#fef9e7;">📊</span>
+      Manual vs. V3 Automated
+    </h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Manual Reconciliation</th>
+          <th>V3 Automated</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Speed</td>
+          <td>Hours per run</td>
+          <td class="good">Minutes end-to-end</td>
+        </tr>
+        <tr>
+          <td>Accuracy</td>
+          <td>Depends on human attention; prone to error</td>
+          <td class="good">Script logic — zero error rate</td>
+        </tr>
+        <tr>
+          <td>Availability</td>
+          <td>Business hours only</td>
+          <td class="good">24 / 7 / 365</td>
+        </tr>
+        <tr>
+          <td>Labour Cost</td>
+          <td>High (dedicated headcount)</td>
+          <td class="good">Near-zero running cost</td>
+        </tr>
+        <tr>
+          <td>Auditability</td>
+          <td>Depends on record-keeping habits</td>
+          <td class="good">Full operation logs retained</td>
+        </tr>
+        <tr>
+          <td>AI Cost</td>
+          <td>—</td>
+          <td class="good">On-demand only; fully controlled</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Security -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#e6f4ea;">🔒</span>
+      Security &amp; Compliance
+    </h2>
+    <div class="security-grid">
+      <div class="sec-item">
+        <div class="sec-icon">🔑</div>
+        <div>
+          <strong>Encrypted Credentials</strong>
+          <p>Login credentials are stored encrypted and never appear in plaintext in code or logs</p>
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-icon">🗄️</div>
+        <div>
+          <strong>Data Stays Internal</strong>
+          <p>Downloaded files are stored on internal servers only; no external transmission</p>
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-icon">🤖</div>
+        <div>
+          <strong>AI Never Sees Raw Data</strong>
+          <p>The AI layer handles instruction dispatch only — raw transaction records are off-limits</p>
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-icon">📋</div>
+        <div>
+          <strong>Full Audit Trail</strong>
+          <p>Every automated action is logged with timestamps, supporting compliance review</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roadmap -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#f3e8fd;">🗺️</span>
+      Implementation Roadmap
+    </h2>
+    <div class="roadmap">
+      <div class="rm-item waiting">
+        <strong>Phase 1 — Information Gathering</strong>
+        <span class="rm-badge badge-waiting">⏳ Awaiting Input</span>
+        <p>Collect login credentials, flow documentation, and download specs for all backends</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>Phase 2 — Build Module A</strong>
+        <span class="rm-badge badge-pending">🔲 Not Started</span>
+        <p>Automated login and transaction file download for FPMS, PMS, and Merchant Portal</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>Phase 3 — Build Module B</strong>
+        <span class="rm-badge badge-pending">🔲 Not Started</span>
+        <p>Python comparison script and structured report generation</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>Phase 4 — Lark Integration</strong>
+        <span class="rm-badge badge-pending">🔲 Not Started</span>
+        <p>Automated push of reconciliation results to designated Lark group</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>Phase 5 — AI Dispatch (Module C)</strong>
+        <span class="rm-badge badge-pending">🔲 Not Started</span>
+        <p>Plain-language command handling and on-demand re-run capability</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>Phase 6 — Testing &amp; Go-Live</strong>
+        <span class="rm-badge badge-pending">🔲 Not Started</span>
+        <p>End-to-end validation, parallel run with manual process, then full cutover</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Internal document — for authorised personnel only &nbsp;·&nbsp; Contact the project lead for amendments
+</footer>
+
+</body>
+</html>

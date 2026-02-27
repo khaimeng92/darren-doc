@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>对账自动化系统 V3 — 技术方案</title>
+  <style>
+    :root {
+      --blue: #1a6cf8;
+      --blue-light: #e8f0fe;
+      --green: #0f9d58;
+      --green-light: #e6f4ea;
+      --orange: #f29900;
+      --orange-light: #fef9e7;
+      --purple: #7b2ff7;
+      --purple-light: #f3e8fd;
+      --red: #d93025;
+      --gray: #5f6368;
+      --gray-light: #f8f9fa;
+      --border: #e0e0e0;
+      --text: #202124;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', sans-serif;
+      background: #f0f4ff;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a6cf8 0%, #7b2ff7 100%);
+      color: white;
+      padding: 60px 40px 50px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    header .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 20px;
+      padding: 4px 16px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+    }
+    header h1 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    header p {
+      font-size: 16px;
+      opacity: 0.85;
+    }
+    header .meta {
+      margin-top: 20px;
+      font-size: 13px;
+      opacity: 0.7;
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    /* ── Section ── */
+    section {
+      background: white;
+      border-radius: 16px;
+      padding: 36px 40px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    section h2 .icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    /* ── Goals ── */
+    .goals {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 8px;
+    }
+    .goal-card {
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+    .goal-card .emoji { font-size: 28px; margin-bottom: 8px; }
+    .goal-card strong { display: block; font-size: 15px; margin-bottom: 4px; }
+    .goal-card p { font-size: 13px; color: var(--gray); }
+
+    /* ── Flow ── */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin: 8px 0;
+      flex-wrap: wrap;
+    }
+    .flow-step {
+      flex: 1;
+      min-width: 140px;
+      border-radius: 12px;
+      padding: 18px 16px;
+      text-align: center;
+      position: relative;
+    }
+    .flow-step .step-num {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      opacity: 0.6;
+      margin-bottom: 6px;
+    }
+    .flow-step .step-icon { font-size: 26px; margin-bottom: 6px; }
+    .flow-step strong { display: block; font-size: 14px; }
+    .flow-step p { font-size: 12px; color: var(--gray); margin-top: 4px; }
+    .flow-arrow {
+      font-size: 20px;
+      color: #bbb;
+      padding: 0 4px;
+      flex-shrink: 0;
+    }
+
+    /* ── Modules ── */
+    .module {
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .module h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .module .subtitle {
+      font-size: 13px;
+      color: var(--gray);
+      margin-bottom: 14px;
+    }
+    .module ul {
+      padding-left: 18px;
+    }
+    .module ul li {
+      font-size: 14px;
+      margin-bottom: 6px;
+      color: #444;
+    }
+    .module .tags {
+      margin-top: 14px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      display: inline-block;
+      border-radius: 20px;
+      padding: 3px 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* Module colors */
+    .mod-a { background: var(--blue-light); }
+    .mod-a h3 { color: var(--blue); }
+    .mod-a .tag { background: #c8dcfd; color: var(--blue); }
+
+    .mod-b { background: var(--green-light); }
+    .mod-b h3 { color: var(--green); }
+    .mod-b .tag { background: #b7e5cd; color: var(--green); }
+
+    .mod-c { background: var(--purple-light); }
+    .mod-c h3 { color: var(--purple); }
+    .mod-c .tag { background: #ddc8fc; color: var(--purple); }
+
+    /* ── Comparison Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    thead tr {
+      background: var(--blue);
+      color: white;
+    }
+    thead th {
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 600;
+    }
+    thead th:first-child { border-radius: 8px 0 0 0; }
+    thead th:last-child { border-radius: 0 8px 0 0; }
+    tbody tr:nth-child(even) { background: var(--gray-light); }
+    tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    tbody td:first-child { font-weight: 600; color: var(--gray); }
+    .good { color: var(--green); font-weight: 600; }
+
+    /* ── Security ── */
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-top: 8px;
+    }
+    .sec-item {
+      background: var(--gray-light);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .sec-item .sec-icon { font-size: 22px; flex-shrink: 0; }
+    .sec-item strong { display: block; font-size: 14px; margin-bottom: 3px; }
+    .sec-item p { font-size: 12px; color: var(--gray); }
+
+    /* ── Roadmap ── */
+    .roadmap {
+      position: relative;
+      padding-left: 30px;
+    }
+    .roadmap::before {
+      content: '';
+      position: absolute;
+      left: 10px; top: 10px; bottom: 10px;
+      width: 2px;
+      background: var(--border);
+    }
+    .rm-item {
+      position: relative;
+      margin-bottom: 20px;
+    }
+    .rm-item::before {
+      content: '';
+      position: absolute;
+      left: -24px; top: 6px;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+    }
+    .rm-item.pending::before { background: var(--border); border-color: var(--border); }
+    .rm-item.waiting::before { background: var(--orange); }
+    .rm-item strong { font-size: 15px; }
+    .rm-item p { font-size: 13px; color: var(--gray); margin-top: 2px; }
+    .rm-badge {
+      display: inline-block;
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .badge-waiting { background: var(--orange-light); color: var(--orange); }
+    .badge-pending { background: var(--gray-light); color: var(--gray); }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: #aaa;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">INTERNAL · CONFIDENTIAL</div>
+  <h1>对账自动化系统 V3</h1>
+  <p>技术与流程方案说明</p>
+  <div class="meta">版本 3.0 &nbsp;·&nbsp; 2026-02-27 &nbsp;·&nbsp; 方案阶段</div>
+</header>
+
+<main>
+
+  <!-- 背景与目标 -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#e8f0fe;">🎯</span>
+      背景与目标
+    </h2>
+    <p style="color:var(--gray); margin-bottom:20px; font-size:15px;">
+      当前对账工作依赖人工登录多个后台、手动下载流水并逐一比对，效率低、易出错、难以追溯。
+      V3 方案通过三模块自动化架构，彻底替代重复性人工操作。
+    </p>
+    <div class="goals">
+      <div class="goal-card" style="background:#e8f0fe;">
+        <div class="emoji">⚡</div>
+        <strong>自动采集</strong>
+        <p>定时登录各后台，自动下载流水数据</p>
+      </div>
+      <div class="goal-card" style="background:#e6f4ea;">
+        <div class="emoji">🔍</div>
+        <strong>自动对比</strong>
+        <p>程序逻辑核对三方数据，结果精准可信</p>
+      </div>
+      <div class="goal-card" style="background:#fef9e7;">
+        <div class="emoji">📲</div>
+        <strong>及时推送</strong>
+        <p>对账结果定时发送 Lark，实时可见</p>
+      </div>
+      <div class="goal-card" style="background:#f3e8fd;">
+        <div class="emoji">🤖</div>
+        <strong>智能响应</strong>
+        <p>自然语言指令触发重跑或异常排查</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 整体流程 -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#fef9e7;">🔄</span>
+      整体流程
+    </h2>
+    <div class="flow">
+      <div class="flow-step" style="background:#e8f0fe;">
+        <div class="step-num">STEP 1</div>
+        <div class="step-icon">🖥️</div>
+        <strong>自动登录下载</strong>
+        <p>FPMS / PMS / 商户后台</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:#e6f4ea;">
+        <div class="step-num">STEP 2</div>
+        <div class="step-icon">⚙️</div>
+        <strong>数据对比分析</strong>
+        <p>Python 脚本执行</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:#fef9e7;">
+        <div class="step-num">STEP 3</div>
+        <div class="step-icon">📩</div>
+        <strong>推送对账结果</strong>
+        <p>发送至 Lark 群组</p>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="background:#f3e8fd;">
+        <div class="step-num">按需</div>
+        <div class="step-icon">💬</div>
+        <strong>AI 响应指令</strong>
+        <p>异常时触发重跑</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 三大模块 -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#e6f4ea;">🏗️</span>
+      三大模块详解
+    </h2>
+
+    <div class="module mod-a">
+      <h3>
+        <span>🖥️</span> 模块 A — 数据采集（自动登录下载）
+      </h3>
+      <p class="subtitle">模拟人工操作，定时登录各业务后台，自动下载流水文件</p>
+      <ul>
+        <li>按预设时间自动启动，无需人工干预</li>
+        <li>登录 <strong>FPMS、PMS、商户后台</strong> 三个系统</li>
+        <li>按指定日期范围导出流水数据至本地</li>
+        <li>登录凭据加密存储，操作行为与人工一致</li>
+      </ul>
+      <div class="tags">
+        <span class="tag">定时执行</span>
+        <span class="tag">无人值守</span>
+        <span class="tag">凭据加密</span>
+      </div>
+    </div>
+
+    <div class="module mod-b">
+      <h3>
+        <span>⚙️</span> 模块 B — 数据对比（Python 脚本）
+      </h3>
+      <p class="subtitle">读取采集文件，执行跨系统数据核对，生成结构化对账报告</p>
+      <ul>
+        <li>比对三方流水：金额、笔数、时间戳</li>
+        <li>识别：金额不符、缺失记录、重复记录</li>
+        <li>输出结构化报告（正常 / 异常 / 待核实）</li>
+        <li>纯程序逻辑，结果确定且可重现，<strong>不依赖 AI 分析</strong></li>
+      </ul>
+      <div class="tags">
+        <span class="tag">程序逻辑</span>
+        <span class="tag">零误差</span>
+        <span class="tag">可重现</span>
+        <span class="tag">低运行成本</span>
+      </div>
+    </div>
+
+    <div class="module mod-c">
+      <h3>
+        <span>🤖</span> 模块 C — AI 智能调度（按需响应）
+      </h3>
+      <p class="subtitle">监听 Lark 指令，理解自然语言，按需触发重新对账或协助排查</p>
+      <ul>
+        <li>业务人员发现异常 → 直接发消息给 AI 触发重跑</li>
+        <li>管理层查询特定日期 / 商户 → 自然语言即可</li>
+        <li>AI <strong>仅负责调度</strong>，不直接分析原始数据</li>
+        <li>Token 消耗极低，成本完全可控</li>
+      </ul>
+      <div class="tags">
+        <span class="tag">自然语言</span>
+        <span class="tag">按需触发</span>
+        <span class="tag">极省 Token</span>
+        <span class="tag">无需懂技术</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 对比 -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#fef9e7;">📊</span>
+      人工对账 vs V3 自动化
+    </h2>
+    <table>
+      <thead>
+        <tr>
+          <th>维度</th>
+          <th>人工对账</th>
+          <th>V3 自动化</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>执行效率</td>
+          <td>数小时 / 次</td>
+          <td class="good">分钟级完成</td>
+        </tr>
+        <tr>
+          <td>准确性</td>
+          <td>依赖人工经验，易出错</td>
+          <td class="good">程序逻辑，零误差</td>
+        </tr>
+        <tr>
+          <td>及时性</td>
+          <td>仅工作时间内</td>
+          <td class="good">7 × 24 小时</td>
+        </tr>
+        <tr>
+          <td>人力成本</td>
+          <td>高</td>
+          <td class="good">极低运行成本</td>
+        </tr>
+        <tr>
+          <td>可追溯性</td>
+          <td>依赖记录习惯</td>
+          <td class="good">全程日志留存</td>
+        </tr>
+        <tr>
+          <td>AI 使用成本</td>
+          <td>—</td>
+          <td class="good">仅按需触发，成本可控</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 安全 -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#e6f4ea;">🔒</span>
+      安全说明
+    </h2>
+    <div class="security-grid">
+      <div class="sec-item">
+        <div class="sec-icon">🔑</div>
+        <div>
+          <strong>凭据加密存储</strong>
+          <p>后台账号密码加密保存，不以明文出现在代码或日志中</p>
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-icon">🗄️</div>
+        <div>
+          <strong>数据不出内网</strong>
+          <p>下载文件仅保存于内部服务器，不对外传输</p>
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-icon">🤖</div>
+        <div>
+          <strong>AI 不碰原始数据</strong>
+          <p>AI 模块仅处理指令调度，不接触原始流水内容</p>
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-icon">📋</div>
+        <div>
+          <strong>完整操作日志</strong>
+          <p>所有自动化操作均有日志留存，支持审计和追溯</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 实施计划 -->
+  <section>
+    <h2>
+      <span class="icon" style="background:#f3e8fd;">🗺️</span>
+      实施计划
+    </h2>
+    <div class="roadmap">
+      <div class="rm-item waiting">
+        <strong>阶段一 — 信息收集</strong>
+        <span class="rm-badge badge-waiting">⏳ 待提供</span>
+        <p>获取各后台登录信息、流程及下载功能说明</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>阶段二 — 开发模块 A</strong>
+        <span class="rm-badge badge-pending">🔲 未开始</span>
+        <p>自动登录 + 流水下载自动化</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>阶段三 — 开发模块 B</strong>
+        <span class="rm-badge badge-pending">🔲 未开始</span>
+        <p>Python 数据对比脚本 + 报告生成</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>阶段四 — Lark 集成</strong>
+        <span class="rm-badge badge-pending">🔲 未开始</span>
+        <p>对账结果自动推送至业务群组</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>阶段五 — AI 调度接入</strong>
+        <span class="rm-badge badge-pending">🔲 未开始</span>
+        <p>模块 C 自然语言指令响应</p>
+      </div>
+      <div class="rm-item pending">
+        <strong>阶段六 — 测试 & 上线</strong>
+        <span class="rm-badge badge-pending">🔲 未开始</span>
+        <p>端到端验证，灰度上线</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  本文档为内部技术方案，仅供内部参考 &nbsp;·&nbsp; 如需修改请联系负责人
+</footer>
+
+</body>
+</html>
