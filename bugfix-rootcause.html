@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Root Cause Analysis — syncClickhousePluginConsumer Infinite Loop</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --red: #f87171;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+    --code-bg: #0d1117;
+    --code-border: #21262d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.75; padding: 2rem;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+
+  .header { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  .header h1 { font-size: 1.6rem; font-weight: 700; color: var(--accent); margin-bottom: .5rem; }
+  .header .sub { color: var(--text-muted); font-size: .9rem; }
+  .header .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; color: var(--text-muted); font-size: .85rem; margin-top: .75rem; }
+
+  .badge { display: inline-block; padding: .15rem .6rem; border-radius: 4px; font-size: .75rem; font-weight: 600; }
+  .badge-critical { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
+
+  section { margin-bottom: 2.5rem; }
+  section h2 { font-size: 1.15rem; font-weight: 600; color: var(--accent); margin-bottom: 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 1.5rem 0 .5rem; }
+  p, li { color: var(--text); margin-bottom: .6rem; }
+  ul { padding-left: 1.25rem; }
+  li { margin-bottom: .4rem; }
+  strong { color: #fff; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+  .card-title { font-weight: 600; margin-bottom: .5rem; display: flex; align-items: center; gap: .5rem; }
+  .card.danger { border-color: var(--red); }
+
+  pre { background: var(--code-bg); border: 1px solid var(--code-border); border-radius: 6px; padding: 1rem; overflow-x: auto; font-size: .82rem; line-height: 1.65; margin: .75rem 0; }
+  code { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace; }
+  .hl { color: var(--red); font-weight: 600; }
+  .cm { color: #6a737d; }
+  .kw { color: #ff7b72; }
+  .str { color: #a5d6ff; }
+  .fn { color: #d2a8ff; }
+  .line-bug { background: rgba(248,113,113,.1); display: block; border-left: 3px solid var(--red); padding-left: .5rem; }
+  .line-ctx { color: var(--text-muted); display: block; }
+
+  .inline-code { background: var(--code-bg); border: 1px solid var(--code-border); padding: .1rem .4rem; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: .82rem; }
+
+  table { width: 100%; border-collapse: collapse; margin: .75rem 0; font-size: .85rem; }
+  th, td { padding: .6rem .75rem; text-align: left; border: 1px solid var(--border); }
+  th { background: var(--surface2); color: var(--accent); font-weight: 600; }
+  td { background: var(--surface); }
+  td.red { color: var(--red); }
+  td.green { color: var(--green); }
+  td.muted { color: var(--text-muted); }
+
+  .flow { display: flex; flex-direction: column; gap: 0; align-items: center; margin: 1.25rem 0; }
+  .flow-step { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: .65rem 1.25rem; text-align: center; font-size: .85rem; width: 100%; max-width: 680px; }
+  .flow-arrow { color: var(--text-muted); font-size: .95rem; padding: .15rem 0; }
+  .flow-step.danger { border-color: var(--red); background: rgba(248,113,113,.08); }
+  .flow-step.loop { border-color: var(--yellow); background: rgba(251,191,36,.06); }
+
+  .example-table { margin: 1rem 0; }
+  .example-table th { font-size: .8rem; }
+  .example-table td { font-family: 'SF Mono', monospace; font-size: .8rem; }
+  .example-table .same { color: var(--yellow); font-weight: 600; }
+  .example-table .diff { color: var(--green); }
+
+  .callout {
+    background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.3);
+    border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0;
+  }
+  .callout-title { color: var(--red); font-weight: 700; margin-bottom: .35rem; font-size: .95rem; }
+
+  .loop-visual {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.25rem; margin: 1rem 0; font-family: 'SF Mono', monospace; font-size: .8rem; line-height: 1.8;
+  }
+  .loop-visual .iter { color: var(--text-muted); }
+  .loop-visual .hash-in { color: var(--accent); }
+  .loop-visual .hash-out { color: var(--yellow); }
+  .loop-visual .result { color: var(--red); font-weight: 600; }
+
+  mark { background: rgba(56,189,248,.2); color: var(--accent); padding: .1rem .3rem; border-radius: 3px; }
+
+  .summary-box {
+    background: linear-gradient(135deg, rgba(248,113,113,.06), rgba(251,191,36,.06));
+    border: 1px solid var(--red); border-radius: 8px; padding: 1.25rem; margin-top: 1rem;
+  }
+  .summary-box h3 { color: var(--red); margin-top: 0; }
+
+  @media (max-width: 640px) {
+    body { padding: 1rem; }
+    .header .meta { flex-direction: column; gap: .5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ============================================================ -->
+<!-- HEADER                                                        -->
+<!-- ============================================================ -->
+<header class="header">
+  <h1>Root Cause Analysis</h1>
+  <div class="sub">syncClickhousePluginConsumer &mdash; Infinite Loop (Dead Loop)</div>
+  <div class="meta">
+    <span><strong>Date:</strong> 2026-02-27</span>
+    <span><strong>Severity:</strong> <span class="badge badge-critical">CRITICAL</span></span>
+    <span><strong>Trigger:</strong> PM2 interpreter changed from Node.js to Bun</span>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<!-- 1. BACKGROUND                                                 -->
+<!-- ============================================================ -->
+<section>
+  <h2>1. Background &mdash; Why Millisecond Deduplication Exists</h2>
+  <p>
+    ClickHouse uses <strong>ReplacingMergeTree</strong> with <code>completeTime</code> as part of the
+    ordering key for the <code>transaction</code> table. This means every row must have a
+    <strong>unique</strong> <code>completeTime</code> value, or rows with identical values will be
+    merged (deduplicated) by ClickHouse, causing data loss.
+  </p>
+  <p>
+    In practice, multiple transactions can finish at the <strong>exact same second</strong>
+    (e.g. <code>2026-02-26 23:57:42</code>). To prevent ClickHouse from merging them, the code
+    appends a <strong>deterministic millisecond offset</strong> (0&ndash;999) to each record's
+    <code>completeTime</code>, computed from a hash of the record's fields.
+  </p>
+  <p>
+    The relevant code path is:
+  </p>
+  <pre><code><span class="line-ctx">processBatch()</span>
+<span class="line-ctx">  &rarr; fixDuplicateTimestamps()        <span class="cm">// detects duplicate completeTime values</span></span>
+<span class="line-ctx">      &rarr; generateUniqueTimestamp()    <span class="cm">// hashes record fields into a ms offset (0-999)</span></span></code></pre>
+</section>
+
+<!-- ============================================================ -->
+<!-- 2. THE BUG                                                    -->
+<!-- ============================================================ -->
+<section>
+  <h2>2. The Bug &mdash; <code>documentId</code> Accepted But Never Used</h2>
+
+  <h3>2.1 &mdash; The Hash Function</h3>
+  <p>
+    <span class="inline-code">generateUniqueTimestamp()</span> in
+    <span class="inline-code">syncProposals.js</span> computes a millisecond offset by hashing
+    a string built from the record's fields:
+  </p>
+  <pre><code><span class="line-ctx"><span class="kw">export const</span> <span class="fn">generateUniqueTimestamp</span> = (completeTime, proposalId, transactionType, <span class="hl">documentId</span>, iteration = 0) =&gt; {</span>
+<span class="line-bug">    <span class="kw">const</span> uniqueStr = <span class="str">`${proposalId}_${transactionType}_${iteration}`</span>;  <span class="cm">// &larr; documentId is NEVER used</span></span>
+<span class="line-ctx"></span>
+<span class="line-ctx">    <span class="kw">const</span> hashCode = uniqueStr.split(<span class="str">''</span>).reduce((a, b) =&gt; {</span>
+<span class="line-ctx">        a = ((a &lt;&lt; 5) - a) + b.charCodeAt(0);</span>
+<span class="line-ctx">        <span class="kw">return</span> a &amp; a;</span>
+<span class="line-ctx">    }, 0);</span>
+<span class="line-ctx"></span>
+<span class="line-ctx">    <span class="kw">const</span> ms = Math.abs(hashCode % 1000);</span>
+<span class="line-ctx">    <span class="kw">return</span> <span class="str">`${baseTime}.${ms.toString().padStart(3, '0')}`</span>;</span>
+<span class="line-ctx">};</span></code></pre>
+
+  <div class="callout">
+    <div class="callout-title">The defect</div>
+    <p style="margin-bottom:0;">
+      The function signature accepts <code>documentId</code> (the MongoDB <code>_id</code>),
+      but the hash string on the highlighted line <strong>only uses
+      <code>proposalId</code>, <code>transactionType</code>, and <code>iteration</code></strong>.
+      The <code>documentId</code> parameter is silently discarded.
+    </p>
+  </div>
+
+  <h3>2.2 &mdash; The While Loop</h3>
+  <p>
+    In <span class="inline-code">processBatch()</span> inside
+    <span class="inline-code">syncClickhousePluginConsumer.js</span>, the dedup logic runs in an
+    unbounded while-loop:
+  </p>
+  <pre><code><span class="line-ctx"><span class="kw">if</span> (syncTableName === <span class="str">'transaction'</span>) {</span>
+<span class="line-ctx">    <span class="kw">let</span> iteration = 0;</span>
+<span class="line-bug">    <span class="kw">while</span> (<span class="fn">fixDuplicateTimestamps</span>(mappedDocs, populatedDocs, processId, ++iteration)) {</span>
+<span class="line-bug">        console.log(<span class="str">`... Fixed some duplicates, checking again (iteration ${iteration})...`</span>);</span>
+<span class="line-bug">    }  <span class="cm">// &larr; No upper bound. Runs forever if duplicates persist.</span></span>
+<span class="line-ctx">}</span></code></pre>
+  <p>
+    The loop only exits when <code>fixDuplicateTimestamps()</code> returns <code>false</code>
+    (meaning zero duplicates remain). There is <strong>no maximum iteration limit</strong>.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- 3. CONCRETE WALKTHROUGH                                       -->
+<!-- ============================================================ -->
+<section>
+  <h2>3. Concrete Walkthrough &mdash; How the Infinite Loop Happens</h2>
+
+  <p>Suppose a Pulsar batch contains two transaction documents:</p>
+
+  <table class="example-table">
+    <thead><tr><th></th><th>Doc A</th><th>Doc B</th></tr></thead>
+    <tbody>
+      <tr><td><code>_id</code></td><td class="diff">661a3f8b...</td><td class="diff">661b7e2c...</td></tr>
+      <tr><td><code>proposalId</code></td><td class="same">P001</td><td class="same">P001</td></tr>
+      <tr><td><code>transactionType</code></td><td class="same">deposit</td><td class="same">deposit</td></tr>
+      <tr><td><code>completeTime</code></td><td class="same">2026-02-26 23:57:42</td><td class="same">2026-02-26 23:57:42</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    They are <strong>different documents</strong> (different <code>_id</code>), but share the same
+    <code>proposalId</code>, <code>transactionType</code>, and <code>completeTime</code>.
+  </p>
+
+  <p>Now watch what happens at each iteration:</p>
+
+  <div class="loop-visual">
+    <div><span class="iter">Iteration 1:</span></div>
+    <div>&nbsp; Doc A hash input: <span class="hash-in">"P001_deposit_1"</span> &rarr; hashCode % 1000 = <span class="hash-out">347</span> &rarr; 23:57:42.<span class="hash-out">347</span></div>
+    <div>&nbsp; Doc B hash input: <span class="hash-in">"P001_deposit_1"</span> &rarr; hashCode % 1000 = <span class="hash-out">347</span> &rarr; 23:57:42.<span class="hash-out">347</span></div>
+    <div>&nbsp; <span class="result">Same input string &rarr; same hash &rarr; STILL DUPLICATED</span></div>
+    <br>
+    <div><span class="iter">Iteration 2:</span></div>
+    <div>&nbsp; Doc A hash input: <span class="hash-in">"P001_deposit_2"</span> &rarr; hashCode % 1000 = <span class="hash-out">512</span> &rarr; 23:57:42.<span class="hash-out">512</span></div>
+    <div>&nbsp; Doc B hash input: <span class="hash-in">"P001_deposit_2"</span> &rarr; hashCode % 1000 = <span class="hash-out">512</span> &rarr; 23:57:42.<span class="hash-out">512</span></div>
+    <div>&nbsp; <span class="result">Same input string &rarr; same hash &rarr; STILL DUPLICATED</span></div>
+    <br>
+    <div><span class="iter">Iteration 3:</span></div>
+    <div>&nbsp; Doc A hash input: <span class="hash-in">"P001_deposit_3"</span> &rarr; hashCode % 1000 = <span class="hash-out">189</span> &rarr; 23:57:42.<span class="hash-out">189</span></div>
+    <div>&nbsp; Doc B hash input: <span class="hash-in">"P001_deposit_3"</span> &rarr; hashCode % 1000 = <span class="hash-out">189</span> &rarr; 23:57:42.<span class="hash-out">189</span></div>
+    <div>&nbsp; <span class="result">Same input string &rarr; same hash &rarr; STILL DUPLICATED</span></div>
+    <br>
+    <div><span class="iter">...</span></div>
+    <br>
+    <div><span class="iter">Iteration 1,973,227:</span></div>
+    <div>&nbsp; Doc A hash input: <span class="hash-in">"P001_deposit_1973227"</span> &rarr; <span class="hash-out">???</span></div>
+    <div>&nbsp; Doc B hash input: <span class="hash-in">"P001_deposit_1973227"</span> &rarr; <span class="hash-out">???</span></div>
+    <div>&nbsp; <span class="result">Still identical. Continues forever.</span></div>
+  </div>
+
+  <p>
+    The key insight: since <code>documentId</code> (<code>_id</code>) is the <strong>only field that
+    differs</strong> between these two records, and it is <strong>not included in the hash</strong>,
+    the hash function receives <strong>identical inputs for both documents at every iteration</strong>.
+    The iteration number changes, but it changes <strong>equally for both</strong> &mdash; so the
+    outputs are always the same.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- 4. FLOW DIAGRAM                                               -->
+<!-- ============================================================ -->
+<section>
+  <h2>4. Bug Flow Diagram</h2>
+  <div class="flow">
+    <div class="flow-step">Pulsar delivers a batch of transaction messages</div>
+    <div class="flow-arrow">&darr;</div>
+    <div class="flow-step">Documents are fetched from MongoDB, populated, and mapped</div>
+    <div class="flow-arrow">&darr;</div>
+    <div class="flow-step">Some mapped records share the same <code>completeTime</code> (same second)</div>
+    <div class="flow-arrow">&darr;</div>
+    <div class="flow-step"><code>fixDuplicateTimestamps()</code> finds N duplicate <code>completeTime</code> values</div>
+    <div class="flow-arrow">&darr;</div>
+    <div class="flow-step danger">
+      For each duplicate, <code>generateUniqueTimestamp()</code> is called<br>
+      Hash input = <code>proposalId + transactionType + iteration</code><br>
+      <strong style="color:var(--red);">documentId is NOT included &rarr; both docs produce the same hash</strong>
+    </div>
+    <div class="flow-arrow">&darr;</div>
+    <div class="flow-step danger">
+      "Fixed" values are still identical &rarr; <code>fixDuplicateTimestamps()</code> returns <code>true</code>
+    </div>
+    <div class="flow-arrow" style="display:flex; align-items:center; gap:.5rem;">
+      &darr; &nbsp; <span style="font-size:.8rem; color:var(--yellow);">while(true) &mdash; loops back</span>
+    </div>
+    <div class="flow-step loop">
+      <code>iteration++</code> &mdash; but both docs get the same new iteration<br>
+      &rarr; same input &rarr; same hash &rarr; same collision &rarr; <strong style="color:var(--red);">infinite loop</strong>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- 5. NODE VS BUN                                                -->
+<!-- ============================================================ -->
+<section>
+  <h2>5. Why Node.js Appeared Normal but Bun Triggered the Dead Loop</h2>
+
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:25%;">Factor</th><th style="width:37.5%;">Node.js</th><th style="width:37.5%;">Bun</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Bug present?</td>
+          <td colspan="2" style="text-align:center; color:var(--yellow); font-weight:600;">Yes &mdash; identical bug in both runtimes</td>
+        </tr>
+        <tr>
+          <td>Execution speed</td>
+          <td>Slower V8 event loop</td>
+          <td>Significantly faster JavaScriptCore engine</td>
+        </tr>
+        <tr>
+          <td>Iterations before<br>180s timeout</td>
+          <td class="muted">Fewer iterations &mdash; scheduler timeout kills the job before the loop becomes highly visible</td>
+          <td class="red">~2,000,000 iterations in seconds &mdash; CPU pinned at 100%, logs flooded</td>
+        </tr>
+        <tr>
+          <td>Observable impact</td>
+          <td class="muted">Worker appeared slow but eventually restarted by scheduler; the bug was masked</td>
+          <td class="red">Worker completely stuck, 14.6M log entries in 4 hours, Pulsar queue backed up</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    The bug was <strong>always there</strong>. Under Node.js, the loop was slow enough that the
+    180-second scheduler timeout (<code>maxExecutionTimeInSec = 180</code>) would kill the job
+    and restart it. The loop would run again on the next cycle, but never long enough to be
+    visibly catastrophic. Under Bun, the same synchronous loop executed orders of magnitude
+    faster, making the infinite loop immediately obvious.
+  </p>
+</section>
+
+<!-- ============================================================ -->
+<!-- 6. AFFECTED SCOPE                                             -->
+<!-- ============================================================ -->
+<section>
+  <h2>6. Affected Scope</h2>
+
+  <h3>What was affected</h3>
+  <ul>
+    <li>Only <strong><code>transaction</code></strong> sync is affected &mdash; it is the only type that enters the <code>fixDuplicateTimestamps</code> while-loop</li>
+    <li>Only triggered when a batch contains two or more transactions with <strong>identical <code>proposalId</code> + <code>transactionType</code> + <code>completeTime</code> (same second)</strong></li>
+    <li>ClickHouse data sync for transactions was <strong>blocked</strong> while the loop was running</li>
+    <li>Pulsar consumer was stuck &mdash; messages accumulated in the queue</li>
+  </ul>
+
+  <h3>What was NOT affected</h3>
+  <ul>
+    <li><strong>MongoDB source data</strong> &mdash; completely untouched, no data loss</li>
+    <li><strong>proposalDeposit / proposalWithdrawal / proposalMerchant</strong> sync &mdash; these types do not go through the dedup loop</li>
+    <li><strong>Previously synced ClickHouse data</strong> &mdash; existing records are not modified</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<!-- 7. LOG EVIDENCE                                               -->
+<!-- ============================================================ -->
+<section>
+  <h2>7. Log Evidence</h2>
+  <div class="card">
+    <div class="card-title">platform-pms-qat &mdash; Feb 26, 2026 20:00 to Feb 27, 2026 00:00</div>
+    <pre><code>Query: "Fixed some duplicates"
+Total: 14,652,334 entries
+
+Sample entries:
+2026-02-26T23:57:56 | syncClickhousePluginConsumer | Fixed some duplicates, checking again (iteration 1973227)...
+2026-02-26T23:57:56 | syncClickhousePluginConsumer | Fixed some duplicates, checking again (iteration 1973226)...</code></pre>
+    <p style="color:var(--text-muted);font-size:.82rem;margin-top:.5rem;">
+      Iteration counts in the millions confirm the loop never converged.
+      Multiple log entries share the same timestamp (same second), indicating
+      extremely rapid iteration with no I/O yielding.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SUMMARY                                                       -->
+<!-- ============================================================ -->
+<section>
+  <div class="summary-box">
+    <h3>Root Cause Summary</h3>
+    <ol>
+      <li>
+        <strong><code>generateUniqueTimestamp()</code> omits <code>documentId</code> from the hash.</strong><br>
+        The function accepts <code>documentId</code> as a parameter but builds its hash string
+        from only <code>proposalId</code>, <code>transactionType</code>, and <code>iteration</code>.
+        When two documents share the same <code>proposalId</code> and <code>transactionType</code>,
+        they always produce the same hash &mdash; regardless of iteration count.
+      </li>
+      <li style="margin-top:.75rem;">
+        <strong>The while-loop has no upper bound.</strong><br>
+        <code>fixDuplicateTimestamps()</code> is called in an unbounded <code>while</code> loop.
+        Since the hash never resolves the collision (point 1), the loop runs forever.
+      </li>
+      <li style="margin-top:.75rem;">
+        <strong>Bun's faster execution exposed a latent Node.js bug.</strong><br>
+        The bug existed under Node.js but was masked by the 180-second scheduler timeout.
+        Bun's significantly faster runtime caused the loop to spin millions of times per second,
+        saturating CPU and flooding logs.
+      </li>
+    </ol>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
