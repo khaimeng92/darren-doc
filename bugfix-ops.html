@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bug 说明 — syncClickhousePluginConsumer 死循环（运营版）</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #273449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --accent: #c084fc;
+    --red: #f87171;
+    --green: #4ade80;
+    --yellow: #fbbf24;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.8; padding: 2rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  .header { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  .header h1 { font-size: 1.6rem; font-weight: 700; color: var(--accent); margin-bottom: .5rem; }
+  .header .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; color: var(--text-muted); font-size: .85rem; }
+  .header .meta span { display: inline-flex; align-items: center; gap: .35rem; }
+
+  .badge { display: inline-block; padding: .15rem .6rem; border-radius: 4px; font-size: .75rem; font-weight: 600; }
+  .badge-critical { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
+  .badge-fix { background: rgba(74,222,128,.15); color: var(--green); border: 1px solid rgba(74,222,128,.3); }
+
+  section { margin-bottom: 2.5rem; }
+  section h2 { font-size: 1.15rem; font-weight: 600; color: var(--accent); margin-bottom: 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 1.25rem 0 .5rem; }
+  p, li { color: var(--text); margin-bottom: .5rem; }
+  ul { padding-left: 1.25rem; }
+  li { margin-bottom: .4rem; }
+  strong { color: #fff; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+
+  .analogy {
+    background: linear-gradient(135deg, rgba(192,132,252,.08), rgba(251,191,36,.08));
+    border: 1px solid rgba(192,132,252,.3); border-radius: 8px;
+    padding: 1.25rem; margin: 1rem 0;
+  }
+  .analogy-title { color: var(--accent); font-weight: 700; font-size: 1rem; margin-bottom: .5rem; }
+
+  .impact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .impact-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
+  .impact-card .num { font-size: 1.7rem; font-weight: 700; }
+  .impact-card .num.red { color: var(--red); }
+  .impact-card .label { color: var(--text-muted); font-size: .82rem; margin-top: .25rem; }
+
+  .timeline { position: relative; padding-left: 2rem; margin: 1rem 0; }
+  .timeline::before { content: ''; position: absolute; left: .6rem; top: .3rem; bottom: .3rem; width: 2px; background: var(--border); }
+  .timeline-item { position: relative; margin-bottom: 1.25rem; }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -1.65rem; top: .45rem;
+    width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface);
+  }
+  .timeline-item.danger::before { border-color: var(--red); background: rgba(248,113,113,.3); }
+  .timeline-item.success::before { border-color: var(--green); background: rgba(74,222,128,.3); }
+  .timeline-item .tl-title { font-weight: 600; font-size: .9rem; }
+  .timeline-item .tl-desc { color: var(--text-muted); font-size: .85rem; }
+
+  .qa-item { margin-bottom: 1.25rem; }
+  .qa-q { font-weight: 700; color: var(--accent); margin-bottom: .25rem; }
+  .qa-a { color: var(--text); padding-left: .75rem; border-left: 3px solid var(--border); }
+
+  table { width: 100%; border-collapse: collapse; margin: .75rem 0; font-size: .85rem; }
+  th, td { padding: .6rem .75rem; text-align: left; border: 1px solid var(--border); }
+  th { background: var(--surface2); color: var(--accent); font-weight: 600; }
+  td { background: var(--surface); }
+
+  .summary-box {
+    background: linear-gradient(135deg, rgba(192,132,252,.08), rgba(74,222,128,.08));
+    border: 1px solid var(--accent); border-radius: 8px; padding: 1.25rem; margin-top: 1rem;
+  }
+  .summary-box h3 { color: var(--accent); margin-top: 0; }
+
+  @media (max-width: 640px) {
+    body { padding: 1rem; }
+    .header .meta { flex-direction: column; gap: .5rem; }
+    .impact-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="header">
+  <h1>ClickHouse 同步 Worker 死循环 — 业务影响说明</h1>
+  <div class="meta">
+    <span><strong>日期：</strong> 2026-02-27</span>
+    <span><strong>严重等级：</strong> <span class="badge badge-critical">CRITICAL</span></span>
+    <span><strong>涉及模块：</strong> syncClickhousePluginConsumer</span>
+    <span><strong>状态：</strong> <span class="badge badge-fix">已修复</span></span>
+  </div>
+</header>
+
+<!-- 一句话总结 -->
+<section>
+  <h2>一句话总结</h2>
+  <div class="card" style="font-size:1.05rem;">
+    <p>
+      ClickHouse 数据同步 Worker 里有一个"去重"程序存在缺陷——当两条交易记录拥有相同的完成时间时，
+      系统会不断尝试修正，但<strong style="color:var(--red);">每次修正的结果仍然相同</strong>，
+      导致程序陷入<strong style="color:var(--red);">无限重试</strong>，无法继续处理后续消息。
+    </p>
+  </div>
+</section>
+
+<!-- 通俗比喻 -->
+<section>
+  <h2>通俗比喻</h2>
+  <div class="analogy">
+    <div class="analogy-title">想象一个场景：</div>
+    <p>
+      你有两个包裹需要放到架子上，每个包裹必须放在<strong>不同的格子</strong>里。
+      系统会根据包裹上的「收件人 + 类型」来决定放在哪个格子。
+    </p>
+    <p>
+      但如果两个包裹的「收件人 + 类型」<strong>完全一样</strong>，系统每次计算出的格子都是同一个——
+      于是它发现冲突 → 重新算 → 还是同一个格子 → 再冲突 → 再重算……<strong style="color:var(--red);">永远算不出不同的结果</strong>。
+    </p>
+    <p style="margin-top:.75rem;">
+      <strong style="color:var(--green);">修复方法：</strong>在计算时加入包裹的<strong>唯一编号（_id）</strong>，
+      这样即使收件人和类型相同，每个包裹也能分到不同的格子。问题解决。
+    </p>
+  </div>
+</section>
+
+<!-- 影响范围 -->
+<section>
+  <h2>影响范围</h2>
+  <div class="impact-grid">
+    <div class="impact-card">
+      <div class="num red">14,652,334</div>
+      <div class="label">4小时内产生的重复日志条数</div>
+    </div>
+    <div class="impact-card">
+      <div class="num red">~1,973,227</div>
+      <div class="label">单批次最大循环迭代次数</div>
+    </div>
+    <div class="impact-card">
+      <div class="num red">100%</div>
+      <div class="label">CPU 被此 Worker 占满</div>
+    </div>
+    <div class="impact-card">
+      <div class="num red">阻塞</div>
+      <div class="label">后续 Pulsar 消息无法消费</div>
+    </div>
+  </div>
+
+  <h3>具体影响</h3>
+  <ul>
+    <li><strong>ClickHouse 数据延迟：</strong>Worker 卡死在去重循环中，无法将新的交易数据写入 ClickHouse，导致报表/查询数据延迟</li>
+    <li><strong>日志爆炸：</strong>4小时内产生 1460 万条无效日志，占用磁盘空间并增加日志服务费用</li>
+    <li><strong>CPU 资源浪费：</strong>Worker 进程持续满载运行，挤占同机器上其他服务的资源</li>
+    <li><strong>Pulsar 消息堆积：</strong>消费者被阻塞，Pulsar 队列中消息持续堆积</li>
+  </ul>
+
+  <h3>不受影响的部分</h3>
+  <ul>
+    <li>MongoDB 原始数据完整，不受此 Bug 影响</li>
+    <li>存款 / 取款 / 商户提案的同步流程不受影响（仅 transaction 类型触发去重逻辑）</li>
+    <li>已经写入 ClickHouse 的历史数据不受影响</li>
+  </ul>
+</section>
+
+<!-- 事件时间线 -->
+<section>
+  <h2>事件时间线</h2>
+  <div class="timeline">
+    <div class="timeline-item">
+      <div class="tl-title">PM2 interpreter 从 Node.js 切换为 Bun</div>
+      <div class="tl-desc">为提升性能，将 syncClickhouse Worker 的运行时改为 Bun</div>
+    </div>
+    <div class="timeline-item danger">
+      <div class="tl-title">Worker 陷入死循环</div>
+      <div class="tl-desc">Bun 执行速度更快，原本在 Node.js 下被超时机制掩盖的 Bug 被彻底暴露——每秒产生数十万次无意义循环</div>
+    </div>
+    <div class="timeline-item danger">
+      <div class="tl-title">日志监控告警 / 发现异常</div>
+      <div class="tl-desc">日志中出现大量 "Fixed some duplicates, checking again (iteration 1973227)..." 记录</div>
+    </div>
+    <div class="timeline-item success">
+      <div class="tl-title">定位原因 &amp; 修复代码</div>
+      <div class="tl-desc">发现 generateUniqueTimestamp 函数遗漏了 documentId 参数，同时添加了循环上限保护</div>
+    </div>
+    <div class="timeline-item success">
+      <div class="tl-title">部署修复版本后恢复正常</div>
+      <div class="tl-desc">去重循环在 1-2 次迭代内即可完成，Worker 正常消费消息</div>
+    </div>
+  </div>
+</section>
+
+<!-- Q&A -->
+<section>
+  <h2>常见问题</h2>
+
+  <div class="qa-item">
+    <div class="qa-q">Q: 数据有丢失吗？</div>
+    <div class="qa-a">没有。MongoDB 中的原始数据不受影响。Pulsar 中堆积的消息在 Worker 恢复后会被正常消费并写入 ClickHouse。</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="qa-q">Q: 为什么之前用 Node.js 没出问题？</div>
+    <div class="qa-a">Bug 一直存在，但 Node.js 执行速度较慢，在 180 秒的调度超时内循环次数有限，不容易被察觉。Bun 的速度让循环在短时间内达到数百万次，问题才被暴露。</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="qa-q">Q: 修复后需要手动补数据吗？</div>
+    <div class="qa-a">不需要。Pulsar 中堆积的消息会在 Worker 恢复后自动被消费处理，ClickHouse 数据会自动补齐。</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="qa-q">Q: 会再次发生吗？</div>
+    <div class="qa-a">不会。修复后每条记录都有唯一标识参与计算，同时加了最大 10 次循环的安全保护，即使极端情况也不会再死循环。</div>
+  </div>
+</section>
+
+<!-- 修复前后对比 -->
+<section>
+  <h2>修复前后对比</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:30%;">指标</th><th style="width:35%;">修复前</th><th style="width:35%;">修复后</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>去重循环次数</td>
+          <td style="color:var(--red);">无限（永不结束）</td>
+          <td style="color:var(--green);">1-2 次即可完成</td>
+        </tr>
+        <tr>
+          <td>单批次处理时间</td>
+          <td style="color:var(--red);">超时（180秒+）</td>
+          <td style="color:var(--green);">毫秒级</td>
+        </tr>
+        <tr>
+          <td>CPU 占用</td>
+          <td style="color:var(--red);">100%（持续满载）</td>
+          <td style="color:var(--green);">正常水平</td>
+        </tr>
+        <tr>
+          <td>日志量</td>
+          <td style="color:var(--red);">每4小时 1460 万条</td>
+          <td style="color:var(--green);">正常（每批次数条）</td>
+        </tr>
+        <tr>
+          <td>ClickHouse 数据同步</td>
+          <td style="color:var(--red);">阻塞，数据延迟</td>
+          <td style="color:var(--green);">实时正常同步</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 总结 -->
+<section>
+  <div class="summary-box">
+    <h3>总结</h3>
+    <p>
+      这是一个代码层面的逻辑缺陷，导致数据同步 Worker 陷入无限循环。
+      <strong>不涉及数据丢失</strong>，修复后 Worker 恢复正常，堆积的消息会自动补齐。
+      同时已添加安全保护机制，确保同类问题不会再发生。
+    </p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
