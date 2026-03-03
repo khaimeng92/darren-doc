@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AllBank 绑定流程</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #f8f7f4;
+  font-family: 'Noto Sans SC', sans-serif;
+  padding: 40px 32px 80px;
+  color: #1a1a1a;
+  min-width: 760px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.page-sub {
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 32px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+.tab {
+  padding: 9px 24px;
+  border-radius: 24px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid #e0ddd6;
+  background: white;
+  color: #888;
+  transition: all 0.15s;
+}
+.tab.active.link-tab   { background: #1d4ed8; border-color: #1d4ed8; color: white; }
+.tab.active.unlink-tab { background: #dc2626; border-color: #dc2626; color: white; }
+.tab:hover:not(.active) { border-color: #bbb; color: #333; }
+
+.flow { display: none; }
+.flow.active { display: block; }
+
+/* Flow steps */
+.steps-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* Actor pill */
+.actor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px 5px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1.5px solid;
+  white-space: nowrap;
+}
+.actor-pill .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+
+.pill-fe     { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.pill-fe .dot { background: #1d4ed8; }
+.pill-fpms   { background: #f5f3ff; border-color: #c4b5fd; color: #6d28d9; }
+.pill-fpms .dot { background: #6d28d9; }
+.pill-pms    { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.pill-pms .dot { background: #d97706; }
+.pill-ab     { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+.pill-ab .dot { background: #059669; }
+
+/* Step card */
+.step-card {
+  width: 100%;
+  max-width: 580px;
+  background: white;
+  border: 1.5px solid #e8e4dc;
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+
+.step-num-circle {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.step-body { flex: 1; }
+.step-actor { margin-bottom: 4px; }
+.step-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  line-height: 1.4;
+  margin-bottom: 3px;
+}
+.step-detail {
+  font-size: 0.75rem;
+  color: #888;
+  line-height: 1.5;
+}
+
+/* Arrow connector */
+.arrow-down {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 0;
+  gap: 0;
+}
+.arrow-line {
+  width: 2px;
+  height: 20px;
+  background: #d4d0c8;
+}
+.arrow-head {
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid #d4d0c8;
+}
+.arrow-label-txt {
+  font-size: 0.65rem;
+  color: #aaa;
+  margin: 2px 0 4px;
+  font-style: italic;
+}
+
+/* Highlight note */
+.note-card {
+  width: 100%;
+  max-width: 580px;
+  background: #fffdf0;
+  border: 1.5px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 0.75rem;
+  color: #78350f;
+  line-height: 1.6;
+}
+
+/* success highlight step */
+.step-card.success {
+  border-color: #6ee7b7;
+  background: #f0fdf4;
+}
+.step-card.danger {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #666;
+}
+
+/* Section break */
+.section-break {
+  width: 100%;
+  max-width: 580px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+.section-break span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #bbb;
+  white-space: nowrap;
+}
+.section-break::before,
+.section-break::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e8e4dc;
+}
+</style>
+</head>
+<body>
+
+<div class="page-title">AllBank 账户绑定流程</div>
+<div class="page-sub">玩家通过注册链接（RTL）绑定 / 解绑 AllBank 账户</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="actor-pill pill-fe"><span class="dot"></span>FE</span> 前端页面</div>
+  <div class="legend-item"><span class="actor-pill pill-fpms"><span class="dot"></span>FPMS</span> 玩家信息系统</div>
+  <div class="legend-item"><span class="actor-pill pill-pms"><span class="dot"></span>PMS</span> 支付系统</div>
+  <div class="legend-item"><span class="actor-pill pill-ab"><span class="dot"></span>AllBank</span> 银行（外部）</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active link-tab" onclick="show('link',this,'link-tab')">🔗 绑定账户</button>
+  <button class="tab unlink-tab" onclick="show('unlink',this,'unlink-tab')">✂️ 解绑账户</button>
+</div>
+
+<!-- LINK FLOW -->
+<div class="flow active" id="f-link">
+<div class="steps-wrap">
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#dbeafe;color:#1d4ed8">1</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-fe"><span class="dot"></span>玩家 / FE</span></div>
+      <div class="step-text">玩家点击「绑定 AllBank 账户」</div>
+      <div class="step-detail">系统请求生成一条专属注册链接</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#ede9fe;color:#6d28d9">2</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-fpms"><span class="dot"></span>FPMS</span> → <span class="actor-pill pill-pms"><span class="dot"></span>PMS</span></div>
+      <div class="step-text">生成 AllBank 注册链接</div>
+      <div class="step-detail">FPMS 通知支付系统，支付系统向 AllBank 申请一条专属注册 URL</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#dbeafe;color:#1d4ed8">3</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-fe"><span class="dot"></span>玩家 / FE</span></div>
+      <div class="step-text">跳转到 AllBank 页面完成注册</div>
+      <div class="step-detail">玩家在 AllBank 官方页面登录并授权绑定，操作完全由 AllBank 处理</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#d1fae5;color:#065f46">4</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-ab"><span class="dot"></span>AllBank</span></div>
+      <div class="step-text">AllBank 通知绑定结果</div>
+      <div class="step-detail">玩家完成注册后，AllBank 自动回调通知支付系统，返回玩家绑定 ID（playerLinkId）</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#fef3c7;color:#92400e">5</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-pms"><span class="dot"></span>PMS</span> → <span class="actor-pill pill-fpms"><span class="dot"></span>FPMS</span></div>
+      <div class="step-text">支付系统转发绑定结果给玩家系统</div>
+      <div class="step-detail">支付系统验证回调，将 AllBank 绑定 ID 传给 FPMS，由 FPMS 保存至玩家档案</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card success">
+    <div class="step-num-circle" style="background:#bbf7d0;color:#065f46">✓</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-fe"><span class="dot"></span>玩家 / FE</span></div>
+      <div class="step-text">绑定完成，页面显示「已绑定」</div>
+      <div class="step-detail">玩家可正常使用 AllBank 进行存取款</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- UNLINK FLOW -->
+<div class="flow" id="f-unlink">
+<div class="steps-wrap">
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#dbeafe;color:#1d4ed8">1</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-fe"><span class="dot"></span>玩家 / FE</span></div>
+      <div class="step-text">玩家点击「解绑 AllBank 账户」</div>
+      <div class="step-detail">系统发起解绑请求</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#ede9fe;color:#6d28d9">2</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-fpms"><span class="dot"></span>FPMS</span> → <span class="actor-pill pill-pms"><span class="dot"></span>PMS</span></div>
+      <div class="step-text">玩家系统通知支付系统解绑</div>
+      <div class="step-detail">FPMS 获取该玩家的 AllBank 绑定 ID，传给支付系统处理</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#fef3c7;color:#92400e">3</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-pms"><span class="dot"></span>PMS</span> → <span class="actor-pill pill-ab"><span class="dot"></span>AllBank</span></div>
+      <div class="step-text">支付系统向 AllBank 发起解绑</div>
+      <div class="step-detail">AllBank 撤销该玩家的绑定授权，返回确认结果</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card">
+    <div class="step-num-circle" style="background:#ede9fe;color:#6d28d9">4</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-pms"><span class="dot"></span>PMS</span> → <span class="actor-pill pill-fpms"><span class="dot"></span>FPMS</span></div>
+      <div class="step-text">解绑结果回传玩家系统</div>
+      <div class="step-detail">FPMS 更新玩家档案，移除 AllBank 绑定记录</div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><div class="arrow-line"></div><div class="arrow-head"></div></div>
+
+  <div class="step-card danger">
+    <div class="step-num-circle" style="background:#fecaca;color:#dc2626">✓</div>
+    <div class="step-body">
+      <div class="step-actor"><span class="actor-pill pill-fe"><span class="dot"></span>玩家 / FE</span></div>
+      <div class="step-text">解绑完成，页面显示「未绑定」</div>
+      <div class="step-detail">AllBank 相关支付功能暂停，玩家可重新绑定</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+function show(id, btn, cls) {
+  document.querySelectorAll('.flow').forEach(d => d.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('f-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>
