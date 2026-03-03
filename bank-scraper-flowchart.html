@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bank Scraper V2 — System Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --border: #d0cdc4;
+  --border-strong: #a09d96;
+  --text: #1a1917;
+  --text-muted: #6b6860;
+  --text-faint: #a09d96;
+  --blue: #1d4ed8; --blue-bg: #eff6ff; --blue-border: #93c5fd;
+  --green: #166534; --green-bg: #f0fdf4; --green-border: #86efac;
+  --amber: #92400e; --amber-bg: #fffbeb; --amber-border: #fcd34d;
+  --red: #991b1b; --red-bg: #fef2f2; --red-border: #fca5a5;
+  --purple: #5b21b6; --purple-bg: #f5f3ff; --purple-border: #c4b5fd;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  background-image: linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  font-family: var(--sans);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 48px 24px 64px;
+}
+.header {
+  max-width: 900px; margin: 0 auto 48px;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  border-bottom: 2px solid var(--text); padding-bottom: 16px;
+}
+.header-left h1 { font-family: var(--mono); font-size: 1.1rem; font-weight: 600; }
+.header-left p { font-size: 0.75rem; color: var(--text-muted); margin-top: 3px; font-family: var(--mono); }
+.ver-badge { font-family: var(--mono); font-size: 0.65rem; font-weight: 600; background: var(--text); color: var(--bg); padding: 3px 8px; border-radius: 3px; letter-spacing: 0.06em; }
+.canvas { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 0; }
+.phase-header { display: flex; align-items: center; gap: 12px; margin: 36px 0 20px; }
+.phase-num { font-family: var(--mono); font-size: 0.6rem; font-weight: 600; background: var(--text); color: var(--bg); padding: 3px 8px; border-radius: 2px; text-transform: uppercase; white-space: nowrap; letter-spacing: 0.06em; }
+.phase-title { font-family: var(--mono); font-size: 0.72rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.phase-line { flex: 1; height: 1px; background: var(--border); }
+.flow-col { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.node {
+  width: 100%; max-width: 480px; background: var(--surface);
+  border: 1.5px solid var(--border-strong); border-radius: 6px;
+  padding: 14px 18px; transition: box-shadow 0.15s, transform 0.15s; cursor: default;
+}
+.node:hover { box-shadow: 4px 4px 0 var(--border-strong); transform: translate(-1px, -1px); }
+.node-tag { font-family: var(--mono); font-size: 0.58rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 5px; color: var(--text-muted); }
+.node-title { font-size: 0.85rem; font-weight: 600; color: var(--text); line-height: 1.3; }
+.node-desc { font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+.node code { font-family: var(--mono); font-size: 0.7rem; background: #f0ede8; padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); }
+.node.trigger { border-radius: 32px; max-width: 280px; text-align: center; background: var(--text); border-color: var(--text); }
+.node.trigger .node-tag { color: #a09d96; }
+.node.trigger .node-title { color: #f5f4f0; }
+.node.decision { border-color: var(--amber-border); background: var(--amber-bg); max-width: 380px; }
+.node.decision .node-tag { color: var(--amber); }
+.node.decision .node-title { color: var(--amber); }
+.node.db { border-color: var(--green-border); background: var(--green-bg); border-style: dashed; }
+.node.db .node-tag { color: var(--green); }
+.node.db .node-title { color: var(--green); }
+.node.addon { border-color: var(--purple-border); background: var(--purple-bg); }
+.node.addon .node-tag { color: var(--purple); }
+.node.addon .node-title { color: var(--purple); }
+.node.io { border-color: var(--blue-border); background: var(--blue-bg); }
+.node.io .node-tag { color: var(--blue); }
+.node.io .node-title { color: var(--blue); }
+.node.error { border-color: var(--red-border); background: var(--red-bg); }
+.node.error .node-tag { color: var(--red); }
+.node.error .node-title { color: var(--red); }
+.connector { display: flex; flex-direction: column; align-items: center; padding: 2px 0; }
+.conn-line { width: 1.5px; min-height: 24px; background: var(--border-strong); }
+.conn-arrow { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--border-strong); }
+.branch-label { font-family: var(--mono); font-size: 0.62rem; font-weight: 600; padding: 3px 10px; border-radius: 10px; margin-bottom: 8px; letter-spacing: 0.06em; text-transform: uppercase; }
+.branch-label.yes { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+.branch-label.no  { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.branch-label.expired { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.branch-label.valid   { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+.optional-box { width: 100%; max-width: 600px; border: 1.5px dashed var(--purple-border); border-radius: 8px; padding: 20px 18px 16px; background: #faf9ff; position: relative; margin: 4px 0; }
+.optional-box-label { position: absolute; top: -10px; left: 16px; background: #faf9ff; padding: 0 8px; font-family: var(--mono); font-size: 0.6rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--purple); border: 1px solid var(--purple-border); border-radius: 3px; }
+.h-flow { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: 100%; }
+.bank-chip { background: var(--surface); border: 1.5px solid var(--border-strong); border-radius: 6px; padding: 10px 16px; font-family: var(--mono); font-size: 0.72rem; font-weight: 600; color: var(--text); text-align: center; min-width: 110px; transition: box-shadow 0.15s, transform 0.15s; }
+.bank-chip:hover { box-shadow: 3px 3px 0 var(--border-strong); transform: translate(-1px, -1px); }
+.bank-chip .bank-status { font-size: 0.62rem; font-weight: 400; color: var(--text-muted); margin-top: 3px; }
+.bank-chip.warn { border-color: var(--amber-border); background: var(--amber-bg); }
+.bank-chip.warn .bank-status { color: var(--amber); }
+.priority-table { width: 100%; border: 1.5px solid var(--border-strong); border-radius: 6px; overflow: hidden; background: var(--surface); font-size: 0.78rem; }
+.pt-head { display: grid; grid-template-columns: 36px 1fr 120px; background: var(--text); color: var(--bg); font-family: var(--mono); font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.pt-head div, .pt-row div { padding: 9px 14px; }
+.pt-row { display: grid; grid-template-columns: 36px 1fr 120px; border-top: 1px solid var(--border); transition: background 0.1s; }
+.pt-row:hover { background: #faf9f5; }
+.pt-num { font-family: var(--mono); font-weight: 600; color: var(--text-muted); font-size: 0.72rem; }
+.pt-badge { font-family: var(--mono); font-size: 0.62rem; font-weight: 600; padding: 3px 10px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.06em; display: inline-block; }
+.pt-badge.high   { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.pt-badge.medium { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+.pt-badge.addon  { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 40px; padding: 16px 20px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px; }
+.legend-item { display: flex; align-items: center; gap: 7px; font-size: 0.68rem; color: var(--text-muted); font-family: var(--mono); }
+.legend-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1.5px solid; flex-shrink: 0; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.phase-header { animation: fadeUp 0.35s ease both; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>BANK SCRAPER — SYSTEM FLOW</h1>
+    <p>Architecture reference · Developer handoff</p>
+  </div>
+  <div class="header-right"><span class="ver-badge">V2</span></div>
+</div>
+
+<div class="canvas">
+
+  <!-- PHASE 1 -->
+  <div class="phase-header">
+    <div class="phase-num">Phase 01</div>
+    <div class="phase-title">Session Initiation · Token Extraction</div>
+    <div class="phase-line"></div>
+  </div>
+
+  <div class="flow-col">
+    <div class="node trigger">
+      <div class="node-tag">Trigger</div>
+      <div class="node-title">Bot Starts / Schedule Hit</div>
+    </div>
+
+    <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+
+    <div class="node">
+      <div class="node-tag">Step 01</div>
+      <div class="node-title">Browser Login to Bank Website</div>
+      <div class="node-desc">Headless browser submits credentials via scraper</div>
+    </div>
+
+    <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+
+    <!-- OPTIONAL OTP BOX -->
+    <div class="optional-box">
+      <div class="optional-box-label">Optional · SMS OTP Add-on</div>
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
+          <div class="node decision" style="width:100%;">
+            <div class="node-tag">Decision</div>
+            <div class="node-title">OTP Required?</div>
+            <div class="node-desc">Does bank respond with an OTP challenge?</div>
+          </div>
+          <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+          <span class="branch-label yes">Yes</span>
+          <div class="node addon" style="width:100%;">
+            <div class="node-tag">SMS Forwarder APK</div>
+            <div class="node-title">Android intercepts OTP SMS</div>
+            <div class="node-desc">Forwards via Webhook → stored in <code>DB.otp</code></div>
+          </div>
+          <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+          <div class="node addon" style="width:100%;">
+            <div class="node-tag">Auto Submit</div>
+            <div class="node-title">Bot reads OTP from DB → submits to bank</div>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:center; padding-top:56px;">
+          <span class="branch-label no">No / Skip</span>
+          <div style="height:106px; width:1.5px; background:#d0cdc4; margin-top:6px;"></div>
+          <div style="font-size:0.62rem; color:var(--text-faint); font-family:var(--mono); margin-top:4px;">↓</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+
+    <div class="node">
+      <div class="node-tag">Step 02</div>
+      <div class="node-title">Navigate to Transaction Table</div>
+      <div class="node-desc">Set filter → <strong>Last 7 Days</strong> → click <strong>Posting Date</strong> column to trigger sort network request</div>
+    </div>
+
+    <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+
+    <div class="node">
+      <div class="node-tag">Step 03</div>
+      <div class="node-title">Intercept Network Request</div>
+      <div class="node-desc">Inspect browser DevTools payload → extract session Token from parameter <code>x=""</code></div>
+    </div>
+
+    <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+
+    <div class="node db">
+      <div class="node-tag">DB Write · token table</div>
+      <div class="node-title">Save Token to Database</div>
+      <div class="node-desc">Reuse for up to <strong>48 hrs</strong> · randomized refresh interval for human mimicry</div>
+    </div>
+  </div>
+
+  <!-- PHASE 2 -->
+  <div class="phase-header">
+    <div class="phase-num">Phase 02</div>
+    <div class="phase-title">API Scraping Loop · Every 10 Seconds</div>
+    <div class="phase-line"></div>
+  </div>
+
+  <div class="flow-col">
+    <div class="node">
+      <div class="node-tag">Step 04</div>
+      <div class="node-title">Load Token from DB</div>
+      <div class="node-desc">Read active session token from <code>DB.token</code></div>
+    </div>
+    <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+    <div class="node">
+      <div class="node-tag">Step 05</div>
+      <div class="node-title">Direct HTTPS API Call to Bank</div>
+      <div class="node-desc">No browser render — raw API request using session token for transaction history</div>
+    </div>
+    <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+    <div class="node decision">
+      <div class="node-tag">Decision</div>
+      <div class="node-title">Token Still Valid?</div>
+    </div>
+  </div>
+
+  <!-- BRANCH: expired / valid -->
+  <div style="display:flex; width:100%; max-width:780px; margin:0 auto; align-items:flex-start; gap:16px;">
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
+      <div class="connector"><div class="conn-line" style="min-height:18px;"></div><div class="conn-arrow"></div></div>
+      <span class="branch-label expired">Expired / 401</span>
+      <div class="node error" style="width:100%;">
+        <div class="node-tag">Error</div>
+        <div class="node-title">Session Expired</div>
+        <div class="node-desc">Bank returns 401 or invalid token</div>
+      </div>
+      <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+      <div class="node addon" style="width:100%;">
+        <div class="node-tag">Re-auth</div>
+        <div class="node-title">↩ Return to Phase 1</div>
+        <div class="node-desc">Re-login with randomized delay for bot detection avoidance</div>
+      </div>
+    </div>
+
+    <div style="width:1px; background:var(--border); align-self:stretch; margin:0 4px;"></div>
+
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;">
+      <div class="connector"><div class="conn-line" style="min-height:18px;"></div><div class="conn-arrow"></div></div>
+      <span class="branch-label valid">Valid · 200 OK</span>
+      <div class="node" style="width:100%;">
+        <div class="node-tag">Step 06</div>
+        <div class="node-title">Transactions Received</div>
+        <div class="node-desc">Parse response payload for new transaction records</div>
+      </div>
+      <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+      <div class="node db" style="width:100%;">
+        <div class="node-tag">DB Write · deposit table</div>
+        <div class="node-title">Persist to Database</div>
+        <div class="node-desc">Concurrent writes supported · historical record kept</div>
+      </div>
+      <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+      <div class="node io" style="width:100%;">
+        <div class="node-tag">Step 07 · PMS Sync</div>
+        <div class="node-title">Push Proposal Deposit to PMS</div>
+        <div class="node-desc">Direct sync · no redundant logic checks</div>
+      </div>
+      <div class="connector"><div class="conn-line"></div><div class="conn-arrow"></div></div>
+      <div style="font-family:var(--mono); font-size:0.62rem; color:var(--text-faint); padding:4px 0; text-transform:uppercase; letter-spacing:0.06em; text-align:center;">↺ Wait 10s → repeat from Step 04</div>
+    </div>
+  </div>
+
+  <!-- PHASE 3 -->
+  <div class="phase-header">
+    <div class="phase-num">Phase 03</div>
+    <div class="phase-title">Monitoring Endpoints & Deployment</div>
+    <div class="phase-line"></div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; width:100%;">
+    <div class="node io">
+      <div class="node-tag">GET /healthCheck</div>
+      <div class="node-title">Health Check</div>
+      <div class="node-desc">PMS polls to verify bot is alive</div>
+    </div>
+    <div class="node io">
+      <div class="node-tag">GET /balance</div>
+      <div class="node-title">Real-time Balance</div>
+      <div class="node-desc">Live liquidity view per bank account</div>
+    </div>
+    <div class="node addon">
+      <div class="node-tag">Linux · Xvfb</div>
+      <div class="node-title">Headless Deployment</div>
+      <div class="node-desc">Virtual framebuffer in memory — coordinate with SRE for deps install</div>
+    </div>
+  </div>
+
+  <!-- BANKS -->
+  <div class="phase-header">
+    <div class="phase-num">Banks</div>
+    <div class="phase-title">Supported Institutions</div>
+    <div class="phase-line"></div>
+  </div>
+
+  <div class="h-flow">
+    <div class="bank-chip">PNB<div class="bank-status">API ✓</div></div>
+    <div class="bank-chip">CHINABANK<div class="bank-status">API ✓</div></div>
+    <div class="bank-chip">EASTWEST<div class="bank-status">API ✓</div></div>
+    <div class="bank-chip warn">AUB<div class="bank-status">⚠ Under investigation</div></div>
+    <div class="bank-chip">BDO<div class="bank-status">API ✓</div></div>
+    <div class="bank-chip">PBCOM<div class="bank-status">API ✓</div></div>
+  </div>
+
+  <!-- ROADMAP -->
+  <div class="phase-header">
+    <div class="phase-num">Roadmap</div>
+    <div class="phase-title">Development Priority</div>
+    <div class="phase-line"></div>
+  </div>
+
+  <div class="priority-table">
+    <div class="pt-head">
+      <div>#</div><div>Task</div><div>Priority</div>
+    </div>
+    <div class="pt-row">
+      <div class="pt-num">01</div>
+      <div style="padding:9px 14px; font-size:0.78rem; line-height:1.4;">Finalize API scraping for all banks (incl. AUB investigation) + DB persistence layer</div>
+      <div style="padding:9px 14px; display:flex; align-items:center;"><span class="pt-badge high">High</span></div>
+    </div>
+    <div class="pt-row">
+      <div class="pt-num">02</div>
+      <div style="padding:9px 14px; font-size:0.78rem; line-height:1.4;">Web UI for transaction monitoring + <code style="font-family:var(--mono);font-size:0.7rem;background:#f0ede8;padding:1px 4px;border-radius:3px;">/healthCheck</code> + <code style="font-family:var(--mono);font-size:0.7rem;background:#f0ede8;padding:1px 4px;border-radius:3px;">/balance</code> endpoints</div>
+      <div style="padding:9px 14px; display:flex; align-items:center;"><span class="pt-badge medium">Medium</span></div>
+    </div>
+    <div class="pt-row">
+      <div class="pt-num">03</div>
+      <div style="padding:9px 14px; font-size:0.78rem; line-height:1.4;">SMS OTP Forwarder Android APK + Webhook → DB.otp integration</div>
+      <div style="padding:9px 14px; display:flex; align-items:center;"><span class="pt-badge addon">Add-on</span></div>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#fff; border-color:#a09d96;"></div>Process / Step</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--green-bg); border-color:var(--green-border);"></div>DB Read / Write</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--amber-bg); border-color:var(--amber-border);"></div>Decision</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--purple-bg); border-color:var(--purple-border);"></div>Optional / Add-on</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--blue-bg); border-color:var(--blue-border);"></div>PMS I/O</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--red-bg); border-color:var(--red-border);"></div>Error / Warning</div>
+  </div>
+
+</div>
+</body>
+</html>
