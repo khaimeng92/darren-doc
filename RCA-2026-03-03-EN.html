@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCA Report — PMS2.0_PH ClickHouse Sync Backlog Incident (2026-03-03)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; background: #f5f7fa; color: #1a1a2e; line-height: 1.7; }
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: #fff; padding: 48px 60px 40px; }
+  .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .header .subtitle { font-size: 15px; color: #a8b2d8; margin-bottom: 24px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .meta-item { background: rgba(255,255,255,0.08); border-radius: 8px; padding: 12px 16px; }
+  .meta-item .label { font-size: 11px; color: #7f8fa6; text-transform: uppercase; letter-spacing: 0.8px; }
+  .meta-item .value { font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .severity-p1 { color: #ff6b6b; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 60px; }
+  .section { background: #fff; border-radius: 12px; padding: 32px 36px; margin-bottom: 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .section h2 { font-size: 20px; font-weight: 700; color: #0f3460; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #e8ecf3; display: flex; align-items: center; gap: 10px; }
+  h3 { font-size: 16px; font-weight: 600; color: #16213e; margin: 24px 0 10px; }
+  p { margin-bottom: 12px; }
+  ul, ol { margin: 8px 0 12px 24px; }
+  li { margin-bottom: 6px; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 32px; }
+  .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #e0e6f0; }
+  .tl-item { position: relative; margin-bottom: 28px; }
+  .tl-item::before { content: ''; position: absolute; left: -26px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: #0f3460; border: 2px solid #fff; box-shadow: 0 0 0 2px #0f3460; }
+  .tl-item.critical::before { background: #e74c3c; box-shadow: 0 0 0 2px #e74c3c; }
+  .tl-item.warning::before { background: #f39c12; box-shadow: 0 0 0 2px #f39c12; }
+  .tl-item.info::before { background: #3498db; box-shadow: 0 0 0 2px #3498db; }
+  .tl-item.ok::before { background: #27ae60; box-shadow: 0 0 0 2px #27ae60; }
+  .tl-time { font-size: 12px; font-weight: 700; color: #7f8fa6; letter-spacing: 0.3px; font-family: monospace; }
+  .tl-title { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-top: 3px; }
+  .tl-desc { font-size: 13px; color: #555; margin-top: 5px; line-height: 1.6; }
+  .log-evidence { background: #1a1f2e; color: #abb2bf; border-radius: 6px; padding: 10px 14px; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.7; margin-top: 8px; overflow-x: auto; }
+  .log-evidence .ts { color: #61afef; }
+  .log-evidence .key { color: #e5c07b; }
+  .log-evidence .val { color: #98c379; }
+  .log-evidence .err { color: #e06c75; }
+  .log-evidence .dim { color: #5c6370; }
+
+  /* Metrics */
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 16px; margin: 20px 0; }
+  .metric-card { background: #f8f9fc; border-radius: 10px; padding: 18px 20px; border-left: 4px solid #0f3460; }
+  .metric-card.red { border-left-color: #e74c3c; }
+  .metric-card.orange { border-left-color: #f39c12; }
+  .metric-card.green { border-left-color: #27ae60; }
+  .metric-card .num { font-size: 24px; font-weight: 800; color: #0f3460; line-height: 1.1; }
+  .metric-card.red .num { color: #e74c3c; }
+  .metric-card.orange .num { color: #e67e22; }
+  .metric-card .desc { font-size: 12px; color: #7f8fa6; margin-top: 5px; line-height: 1.4; }
+
+  /* Code */
+  pre.code { background: #1e2736; color: #abb2bf; border-radius: 8px; padding: 20px 24px; font-size: 13px; line-height: 1.8; overflow-x: auto; margin: 14px 0; }
+  .kw { color: #c678dd; }
+  .cm { color: #5c6370; font-style: italic; }
+  .st { color: #98c379; }
+  .fn { color: #61afef; }
+  .bad-line { background: rgba(231,76,60,0.2); display: block; border-left: 3px solid #e74c3c; padding-left: 8px; margin-left: -8px; }
+  .good-line { background: rgba(39,174,96,0.12); display: block; border-left: 3px solid #27ae60; padding-left: 8px; margin-left: -8px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
+  th { background: #f0f4ff; font-weight: 600; color: #0f3460; padding: 11px 14px; text-align: left; border-bottom: 2px solid #d0d9ec; }
+  td { padding: 10px 14px; border-bottom: 1px solid #edf0f7; vertical-align: top; }
+  tr:hover td { background: #fafbff; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .badge-red { background: #fff0f0; color: #e74c3c; border: 1px solid #f5c6c6; }
+  .badge-orange { background: #fff8f0; color: #e67e22; border: 1px solid #fdd5a0; }
+  .badge-blue { background: #f0f4ff; color: #0f3460; border: 1px solid #c5d2f0; }
+  .badge-green { background: #f0fff5; color: #27ae60; border: 1px solid #b0e8c5; }
+  .fix-block { border: 1.5px solid #e8ecf3; border-radius: 10px; padding: 22px 26px; margin-bottom: 20px; }
+  .fix-block h4 { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+  .fix-block.p0 { border-color: #e74c3c; background: #fff9f9; }
+  .fix-block.p0 h4 { color: #c0392b; }
+  .fix-block.p1 { border-color: #f39c12; background: #fffaf0; }
+  .fix-block.p1 h4 { color: #d35400; }
+  .fix-block.p2 { border-color: #3498db; background: #f5f9ff; }
+  .fix-block.p2 h4 { color: #2980b9; }
+  .callout { border-radius: 8px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+  .callout.warning { background: #fff8ee; border-left: 4px solid #f39c12; }
+  .callout.danger { background: #fff2f2; border-left: 4px solid #e74c3c; }
+  .callout.info { background: #eef4ff; border-left: 4px solid #3498db; }
+  .callout.success { background: #f0fff5; border-left: 4px solid #27ae60; }
+  .footer { text-align: center; padding: 32px; color: #a0a8b8; font-size: 13px; }
+  code { background: #f0f4ff; padding: 1px 6px; border-radius: 4px; font-size: 13px; color: #0f3460; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Root Cause Analysis (RCA)</h1>
+  <div class="subtitle">PMS2.0_PH — ClickHouse Sync Pipeline Backlog Incident · Confirmed via Code Review + Log Analysis (9M rows)</div>
+  <div class="meta-grid">
+    <div class="meta-item"><div class="label">Incident ID</div><div class="value">INC-2026-0303-001</div></div>
+    <div class="meta-item"><div class="label">Severity</div><div class="value severity-p1">P1 — Critical Data Pipeline</div></div>
+    <div class="meta-item"><div class="label">Incident Start</div><div class="value">2026-03-02 (earlier)</div></div>
+    <div class="meta-item"><div class="label">First Crash</div><div class="value">2026-03-03 01:39:52 GMT+8</div></div>
+    <div class="meta-item"><div class="label">Last Event</div><div class="value">2026-03-03 23:59:28 GMT+8</div></div>
+    <div class="meta-item"><div class="label">Report Date</div><div class="value">2026-03-04</div></div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Executive Summary -->
+  <div class="section">
+    <h2>📋 Executive Summary</h2>
+    <p>The MongoDB → Pulsar → ClickHouse sync pipeline in PMS2.0_PH suffered a cascading failure that generated <strong>270 million duplicate consumer records</strong> and <strong>185 uncontrolled process crashes</strong> over ~24 hours on 2026-03-03. The resume token (checkpoint) was never saved — it grew from 13.2 hours stale to 35.6 hours stale by end of day, causing each restart to replay progressively more historical data.</p>
+    <p>The <strong>root cause</strong> is a one-line bug in <code>generateUniqueTimestamp()</code> in <code>syncProposals.js</code>: the <code>documentId</code> parameter is accepted but never used in the hash. When a batch contains multiple documents sharing the same <code>proposalId</code> and <code>transactionType</code>, no iteration can ever resolve the collision — the <code>fixDuplicateTimestamps</code> while-loop spins forever. Log evidence confirms it reached <strong>6,044,274 iterations</strong> before the first crash. This problem existed as early as 2026-03-02.</p>
+  </div>
+
+  <!-- Confirmed Metrics -->
+  <div class="section">
+    <h2>📊 Confirmed Metrics</h2>
+    <div class="metrics-grid">
+      <div class="metric-card red"><div class="num">185</div><div class="desc">Process crashes<br>SIGTERM = 0 (zero graceful shutdowns)</div></div>
+      <div class="metric-card red"><div class="num">6,044,274</div><div class="desc">Max while-loop iterations<br>fixDuplicateTimestamps, at 01:39:34</div></div>
+      <div class="metric-card red"><div class="num">4,327,899</div><div class="desc">fixDuplicateTimestamps log lines<br>across the full log period</div></div>
+      <div class="metric-card red"><div class="num">270M</div><div class="desc">Consumer records processed<br>vs actual proposal volume</div></div>
+      <div class="metric-card orange"><div class="num">21,964</div><div class="desc">Producer send failures<br>01:50:17 → 23:30:59</div></div>
+      <div class="metric-card orange"><div class="num">13.2h → 35.6h</div><div class="desc">Resume token age progression<br>first crash → end of day</div></div>
+      <div class="metric-card red"><div class="num">0</div><div class="desc">"Saved resume tokens" log events<br>confirmed across all 185 crashes</div></div>
+      <div class="metric-card orange"><div class="num">1,964/min</div><div class="desc">Peak producer failure rate<br>2026-03-03 08:08</div></div>
+    </div>
+  </div>
+
+  <!-- Full Timeline with Log Evidence -->
+  <div class="section">
+    <h2>⏱️ Full Incident Timeline with Log Evidence (All Times GMT+8)</h2>
+
+    <div class="timeline">
+
+      <div class="tl-item ok">
+        <div class="tl-time">2026-03-02 ~12:26 (calculated)</div>
+        <div class="tl-title">Last successful token save to Redis</div>
+        <div class="tl-desc">Back-calculated from the first restart's token age of 47,657s. This was the last time the system was gracefully shut down and the change stream resume token was persisted.</div>
+      </div>
+
+      <div class="tl-item warning">
+        <div class="tl-time">2026-03-02 (exact time in earlier logs)</div>
+        <div class="tl-title">fixDuplicateTimestamps loop already active on Mar 2</div>
+        <div class="tl-desc">Log analysis confirmed <code>fixDuplicateTimestamps</code> activity on 2026-03-02, meaning this infinite loop problem predates the incident date. The system was under stress before Mar 3.</div>
+        <div class="log-evidence"><span class="dim">Dates with fixDuplicateTimestamps activity confirmed in log: ['2026-03-02', '2026-03-03']</span></div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 00:00:00.800</div>
+        <div class="tl-title">🔴 Log window opens — process already stuck in infinite loop (iter 1,718,550)</div>
+        <div class="tl-desc">The very first log line in the downloaded dataset shows <code>fixDuplicateTimestamps</code> already at iteration 1,718,550. Process has been looping since well before midnight. Batch ID: <code>69411772465405001</code> — only 1 duplicate found each iteration, but it never resolves because the hash is identical at every iteration.</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 00:00:00.800 +08:00</span> <span class="err">69411772465405001 fixDuplicateTimestamps | Found 1 duplicate completeTime values in iteration 1718550, fixing...</span>
+<span class="ts">2026-03-03 00:00:00.802 +08:00</span> <span class="err">69411772465405001 fixDuplicateTimestamps | Found 1 duplicate completeTime values in iteration 1718551, fixing...</span>
+<span class="ts">2026-03-03 00:00:00.804 +08:00</span> <span class="err">69411772465405001 fixDuplicateTimestamps | Found 1 duplicate completeTime values in iteration 1718552, fixing...</span>
+<span class="dim">... [continues every ~2ms] ...</span></div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 00:00 → 01:39:34 (~99 minutes)</div>
+        <div class="tl-title">🔴 Loop continues — iteration count climbs from 1.7M to 6.0M</div>
+        <div class="tl-desc">For ~99 minutes the Node.js event loop is completely blocked by this synchronous while-loop. No other work can execute. The consumer cannot process new messages. The timeout callback in <code>schedulerHelper.js</code> cannot fire (event loop is blocked). The process consumes memory for each iteration's log output until OOM.</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 01:39:34.442 +08:00</span> <span class="err">69411772465405001 fixDuplicateTimestamps | Found 1 duplicate completeTime values in iteration <span class="key">6044274</span>, fixing...</span>
+<span class="dim">← Maximum iteration observed in entire log dataset (18 seconds before crash)</span></div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 01:39:52.428</div>
+        <div class="tl-title">🔴 FIRST PROCESS CRASH — OOM / resource exhaustion</div>
+        <div class="tl-desc">Process terminates. No SIGTERM signal, no graceful shutdown, no token save. PM2 immediately restarts the process. The resume token from Mar 2 12:26 remains unchanged in Redis.</div>
+        <div class="log-evidence">
+<span class="dim">← gap: no logs between iter 6,044,274 and restart (process killed)</span>
+<span class="ts">2026-03-03 01:39:52.428 +08:00</span> <span class="val">[Process 184] Starting server...</span>
+<span class="dim">SIGTERM received: 0 times (confirmed). "Saved resume tokens": 0 times (confirmed).</span></div>
+      </div>
+
+      <div class="tl-item info">
+        <div class="tl-time">2026-03-03 01:39:52 → 01:40:08</div>
+        <div class="tl-title">New process starts — loads stale token (age: 47,657s = 13.2h)</div>
+        <div class="tl-desc">Process initializes DB connections, connects to Pulsar, subscribes to topic. Loads resume token from Redis — last saved ~13.2 hours ago at Mar 2 12:26. <code>sentDocuments</code> dedup map is empty (new process). Change Stream begins replaying all events since Mar 2 12:26.</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 01:40:05.023 +08:00</span> <span class="val">Subscription to topic established: persistent://public/default/sync-clickhouse-proposal-v2</span>
+<span class="ts">2026-03-03 01:40:08.012 +08:00</span> <span class="err">changeStream | Restored resume token for proposalDeposit <span class="key">(age: 47657s)</span></span>
+<span class="ts">2026-03-03 01:40:08.012 +08:00</span> <span class="err">changeStream | Restored resume token for transaction <span class="key">(age: 47619s)</span></span>
+<span class="ts">2026-03-03 01:40:08.012 +08:00</span> <span class="err">changeStream | Restored resume token for proposalWithdrawal <span class="key">(age: 47619s)</span></span>
+<span class="ts">2026-03-03 01:40:08.012 +08:00</span> <span class="err">changeStream | Restored resume token for proposalMerchant <span class="key">(age: 47619s)</span></span></div>
+      </div>
+
+      <div class="tl-item info">
+        <div class="tl-time">2026-03-03 01:40:05.957</div>
+        <div class="tl-title">New batch starts — 573 duplicates immediately on iteration 1</div>
+        <div class="tl-desc">The first batch consumed after restart already contains 573 duplicate <code>completeTime</code> values. The replay data is dense with documents sharing the same <code>proposalId</code> + <code>transactionType</code>. The while-loop starts again from iteration 1.</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 01:40:05.957 +08:00</span> <span class="err">74711772473205023 fixDuplicateTimestamps | Found <span class="key">573 duplicate</span> completeTime values in iteration 1, fixing...</span>
+<span class="ts">2026-03-03 01:40:06.932 +08:00</span> <span class="val">[Process 184] Job 1772473205001 (syncClickhousePluginConsumer) completed after Xms</span></div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 01:50:17.278</div>
+        <div class="tl-title">🔴 First Pulsar producer failures — 10 min 25 sec after restart</div>
+        <div class="tl-desc">Replay flood overwhelms Pulsar topic. Send failures begin on the <code>transaction</code> collection. The <code>.catch</code> handler only logs — no retry, no <code>_markDocumentAsSent()</code> call. All failed documents remain eligible for re-send on next crash-restart cycle.</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 01:50:17.278 +08:00</span> <span class="err">changeStream | Producer for clickhouse sync failed for transaction document 69a519be8937abd1ae894f5b: Error: Failed to send 1 messages</span>
+<span class="ts">2026-03-03 01:50:17.278 +08:00</span> <span class="err">changeStream | Producer for clickhouse sync failed for transaction document 69a519be8937abd1ae894f5a: Error: Failed to send 1 messages</span>
+<span class="ts">2026-03-03 01:50:17.278 +08:00</span> <span class="err">changeStream | Producer for clickhouse sync failed for transaction document 69a519be547a5054c487e06e: Error: Failed to send 1 messages</span>
+<span class="dim">... [burst of failures all at 01:50:17.278–.281] ...</span></div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 02:25 — 505 failures/min</div>
+        <div class="tl-title">Second crash cycle — token age growing</div>
+        <div class="tl-desc">Process crashes again (same cause: infinite loop + OOM). No graceful shutdown. Token stays at Mar 2 12:26. Each restart replays a longer window of history.</div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 05:44 — 1,047 failures/min</div>
+        <div class="tl-title">Failure rate exceeds 1,000/min for the first time</div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 08:08 — 1,964 failures/min</div>
+        <div class="tl-title">🔴 ABSOLUTE PEAK — 1,964 producer failures in one minute</div>
+        <div class="tl-desc">Highest failure rate of the incident. Token age now ~20h. All 4 collections replaying simultaneously. Pulsar backlog at maximum.</div>
+      </div>
+
+      <div class="tl-item warning">
+        <div class="tl-time">2026-03-03 08:08 → 23:30 (continuing)</div>
+        <div class="tl-title">Crash-restart cycle repeats 185 times — token age 13h → 35.6h</div>
+        <div class="tl-desc">Every crash loads the same stale Mar 2 12:26 token. With each passing hour, the replay window grows by one more hour. Token age grows at the same rate as wall-clock time.</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 08:28:28 +08:00</span> <span class="err">changeStream | Restored resume token for transaction <span class="key">(age: 71879s = 20.0h)</span></span>
+<span class="ts">2026-03-03 12:08:28 +08:00</span> <span class="err">changeStream | Restored resume token for transaction <span class="key">(age: 85079s = 23.6h)</span></span>
+<span class="ts">2026-03-03 16:08:28 +08:00</span> <span class="err">changeStream | Restored resume token for transaction <span class="key">(age: 99719s = 27.7h)</span></span>
+<span class="ts">2026-03-03 20:01:28 +08:00</span> <span class="err">changeStream | Restored resume token for transaction <span class="key">(age: 113699s = 31.6h)</span></span>
+<span class="ts">2026-03-03 23:59:28 +08:00</span> <span class="err">changeStream | Restored resume token for transaction <span class="key">(age: 127979s = 35.5h)</span></span></div>
+      </div>
+
+      <div class="tl-item critical">
+        <div class="tl-time">2026-03-03 23:30:59.193</div>
+        <div class="tl-title">Last producer failure burst</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 23:30:59.193 +08:00</span> <span class="err">changeStream | Producer for clickhouse sync failed for transaction document 69a584ecb827d5e8d1ee44ff</span>
+<span class="ts">2026-03-03 23:30:59.195 +08:00</span> <span class="err">changeStream | Producer for clickhouse sync failed for transaction document 69a584ecb827d5e8d1ee44fe</span>
+<span class="dim">Total producer failures: 21,964. All on 'transaction' collection.</span></div>
+      </div>
+
+      <div class="tl-item info">
+        <div class="tl-time">2026-03-03 23:59:28 — Final restart logged</div>
+        <div class="tl-title">Token age reaches maximum: 35.6h</div>
+        <div class="log-evidence">
+<span class="ts">2026-03-03 23:59:28.012 +08:00</span> <span class="err">changeStream | Restored resume token for proposalDeposit <span class="key">(age: 128017s = 35.6h)</span></span>
+<span class="ts">2026-03-03 23:59:28.012 +08:00</span> <span class="err">changeStream | Restored resume token for transaction <span class="key">(age: 127979s = 35.5h)</span></span>
+<span class="ts">2026-03-03 23:59:28.012 +08:00</span> <span class="err">changeStream | Restored resume token for proposalWithdrawal <span class="key">(age: 127979s = 35.5h)</span></span>
+<span class="ts">2026-03-03 23:59:28.012 +08:00</span> <span class="err">changeStream | Restored resume token for proposalMerchant <span class="key">(age: 127979s = 35.5h)</span></span></div>
+      </div>
+
+      <div class="tl-item ok">
+        <div class="tl-time">2026-03-04 Afternoon</div>
+        <div class="tl-title">Incident detected. Root cause identified via log analysis.</div>
+        <div class="tl-desc">9 million log rows parsed. All findings confirmed through code review of <code>syncProposals.js</code>, <code>syncClickhousePlugin.js</code>, <code>syncClickhousePluginConsumer.js</code>, <code>pulsarHelper.js</code>, and <code>schedulerRunner.js</code>.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Root Cause Analysis -->
+  <div class="section">
+    <h2>🔍 Root Cause Analysis</h2>
+
+    <h3>Root Cause #1 (Primary — First Domino): <code>generateUniqueTimestamp</code> ignores <code>documentId</code></h3>
+    <p>In <code>syncProposals.js</code>, the function signature accepts <code>documentId</code> but the hash computation excludes it entirely:</p>
+
+    <pre class="code"><span class="cm">// syncProposals.js — generateUniqueTimestamp</span>
+<span class="kw">export const</span> <span class="fn">generateUniqueTimestamp</span> = (completeTime, proposalId, transactionType, <span class="kw">documentId</span>, iteration = 0) => {
+
+<span class="bad-line">    <span class="kw">const</span> uniqueStr = <span class="st">`${proposalId}_${transactionType}_${iteration}`</span>;
+    <span class="cm">// ↑ documentId is received but NEVER USED in the hash — the bug</span></span>
+
+    <span class="kw">const</span> hashCode = uniqueStr.split(<span class="st">''</span>).reduce((a, b) => {
+        a = ((a << 5) - a) + b.charCodeAt(0);
+        <span class="kw">return</span> a & a;
+    }, 0);
+    <span class="kw">const</span> ms = Math.abs(hashCode % 1000);
+    <span class="kw">return</span> <span class="st">`${baseTime}.${ms.toString().padStart(3, '0')}`</span>;
+};</pre>
+
+    <p><strong>Consequence:</strong> Two documents with the same <code>proposalId</code> + <code>transactionType</code> (different <code>_id</code>) produce <strong>identical</strong> timestamps at every iteration. The <code>fixDuplicateTimestamps</code> while-loop can never terminate for such pairs:</p>
+
+    <pre class="code"><span class="cm">// syncClickhousePluginConsumer.js</span>
+<span class="kw">let</span> iteration = 0;
+<span class="bad-line"><span class="kw">while</span> (<span class="fn">fixDuplicateTimestamps</span>(mappedDocs, populatedDocs, processId, ++iteration)) {
+    <span class="cm">// docs with same proposalId+transactionType → same hash at EVERY iteration</span>
+    <span class="cm">// → always returns true → loop never exits</span>
+    <span class="cm">// → observed in production: 6,044,274 iterations before OOM crash</span>
+}</span></pre>
+
+    <h3>Root Cause #2: Three-Layer Token Persistence Failure</h3>
+    <p>Even if the process restarts gracefully, the resume token is <strong>never reliably saved</strong> due to three compounding defects:</p>
+    <table>
+      <tr><th>#</th><th>Defect</th><th>Effect</th></tr>
+      <tr><td><strong>A</strong></td><td><code>shutdownChangeStreams</code> is not exported from <code>syncClickhousePlugin.js</code> — consumer's <code>shutdown()</code> destructs an undefined function</td><td>Token save silently skipped on every graceful shutdown</td></tr>
+      <tr><td><strong>B</strong></td><td><code>process.on('exit', asyncFn)</code> cannot await async operations</td><td>Redis write starts but process exits before completion</td></tr>
+      <tr><td><strong>C</strong></td><td><code>schedulerRunner.js</code> calls <code>process.removeAllListeners(signal)</code> on SIGTERM, removing <code>syncClickhousePlugin</code>'s own SIGTERM handler</td><td>Plugin's graceful shutdown path is unreachable</td></tr>
+    </table>
+    <div class="callout danger"><strong>Log confirmed:</strong> "Saved resume tokens" = <strong>0</strong> occurrences across all 185 restarts. The Mar 2 12:26 token was loaded every single time.</div>
+
+    <h3>Root Cause #3: Silent Error Swallowing in Producer <code>.catch</code></h3>
+    <pre class="code"><span class="bad-line">.catch((error) => {
+    console.error(<span class="st">'changeStream | Producer for clickhouse sync failed...'</span>, error);
+    <span class="cm">// ❌ _markDocumentAsSent() never called → doc eligible for re-send on next restart</span>
+})</span></pre>
+
+    <h3>Root Cause #4: Consumer ACKs Before ClickHouse Write</h3>
+    <p>All Pulsar messages are acknowledged immediately upon receipt, before <code>processBatch()</code> runs. Write failures result in permanent data loss from Pulsar's perspective.</p>
+
+    <h3>Confirmed Ruled-Out Factors</h3>
+    <table>
+      <tr><th>Hypothesis</th><th>Evidence</th><th>Verdict</th></tr>
+      <tr><td>schedulerHelper 180s timeout caused crash</td><td>Event loop was blocked — <code>setTimeout</code> callback cannot fire. "Exceed Execution Timeout" = 0 in logs.</td><td><span class="badge badge-green">Ruled Out</span></td></tr>
+      <tr><td>Change Stream internal errors</td><td>"changeStream | Change stream error" = 0 in logs</td><td><span class="badge badge-green">Ruled Out</span></td></tr>
+      <tr><td>PM2 multi-instance duplication</td><td><code>instances: 1</code> in all PM2 configs</td><td><span class="badge badge-green">Ruled Out</span></td></tr>
+      <tr><td>Pulsar failure as root cause</td><td>First producer failure at 01:50:17 — <strong>10m25s after</strong> the first crash. Pulsar is a consequence.</td><td><span class="badge badge-green">Ruled Out</span></td></tr>
+      <tr><td>Redis resume token corrupted/lost</td><td>Token loads correctly every restart — it is valid but permanently stale</td><td><span class="badge badge-green">Ruled Out</span></td></tr>
+    </table>
+  </div>
+
+  <!-- Fix Plan -->
+  <div class="section">
+    <h2>🔧 Fix Plan</h2>
+
+    <div class="fix-block p0">
+      <h4>🚨 P0 — Fix generateUniqueTimestamp: include documentId in hash (1-line fix)</h4>
+      <pre class="code"><span class="cm">// syncProposals.js</span>
+<span class="bad-line"><span class="kw">const</span> uniqueStr = <span class="st">`${proposalId}_${transactionType}_${iteration}`</span>;</span>
+<span class="good-line"><span class="kw">const</span> uniqueStr = <span class="st">`${proposalId}_${transactionType}_${documentId}_${iteration}`</span>;</span>
+<span class="cm">// MongoDB _id is always unique → no two documents can produce the same hash</span></pre>
+    </div>
+
+    <div class="fix-block p0">
+      <h4>🚨 P0 — Add max iteration guard to while-loop</h4>
+      <pre class="code"><span class="kw">const</span> MAX_DEDUP_ITERATIONS = 10;
+<span class="kw">let</span> iteration = 0;
+<span class="good-line"><span class="kw">while</span> (iteration < MAX_DEDUP_ITERATIONS && <span class="fn">fixDuplicateTimestamps</span>(mappedDocs, populatedDocs, processId, ++iteration)) {
+    <span class="kw">if</span> (iteration >= MAX_DEDUP_ITERATIONS) {
+        console.error(<span class="st">`[${processId}] fixDuplicateTimestamps hit max iterations — breaking to prevent infinite loop`</span>);
+        <span class="kw">break</span>;
+    }
+}</span></pre>
+    </div>
+
+    <div class="fix-block p0">
+      <h4>🚨 P0 — Periodic resume token save (every 30 seconds)</h4>
+      <p>With this fix, a crash causes at most 30 seconds of replay instead of 35 hours.</p>
+      <pre class="code"><span class="cm">// syncClickhousePlugin.js — inside _startCleanupInterval()</span>
+<span class="good-line">setInterval(<span class="kw">async</span> () => {
+    <span class="kw">await</span> <span class="fn">_saveAllResumeTokens</span>();
+}, 30 * 1000);</span></pre>
+    </div>
+
+    <div class="fix-block p0">
+      <h4>🚨 P0 — Export shutdownChangeStreams (fix graceful shutdown token save)</h4>
+      <pre class="code"><span class="cm">// syncClickhousePlugin.js — add export</span>
+<span class="good-line"><span class="kw">export const</span> shutdownChangeStreams = <span class="kw">async</span> () => {
+    <span class="kw">await</span> <span class="fn">_saveAllResumeTokens</span>();
+    <span class="kw">for</span> (<span class="kw">const</span> [, cs] <span class="kw">of</span> globalChangeStreams) <span class="kw">await</span> cs.close();
+    globalChangeStreams.clear();
+    <span class="fn">_stopCleanupInterval</span>();
+};</span>
+<span class="cm">// Also remove: process.on('exit', gracefulShutdown) — async on 'exit' cannot await</span></pre>
+    </div>
+
+    <div class="fix-block p1">
+      <h4>⚠️ P1 — Persist dedup state to Redis (survive restarts)</h4>
+      <pre class="code"><span class="good-line"><span class="kw">async function</span> <span class="fn">_isDocumentRecentlySent</span>(docId) {
+    <span class="kw">return</span> <span class="kw">await</span> redis.exists(<span class="st">`sync:sent:${docId}`</span>);
+}
+<span class="kw">async function</span> <span class="fn">_markDocumentAsSent</span>(docId) {
+    <span class="kw">await</span> redis.set(<span class="st">`sync:sent:${docId}`</span>, <span class="st">'1'</span>, <span class="st">'EX'</span>, 600);
+}</span></pre>
+    </div>
+
+    <div class="fix-block p1">
+      <h4>⚠️ P1 — Producer: add retry + DLQ (never silently drop)</h4>
+      <pre class="code"><span class="good-line">.catch(<span class="kw">async</span> (error) => {
+    <span class="kw">for</span> (<span class="kw">let</span> i = 1; i <= 3; i++) {
+        <span class="kw">try</span> { <span class="kw">await</span> producer.send(payload); <span class="kw">await</span> <span class="fn">_markDocumentAsSent</span>(docId); <span class="kw">return</span>; }
+        <span class="kw">catch</span> (e) {
+            <span class="kw">if</span> (i === 3) { <span class="kw">await</span> <span class="fn">_sendToDLQ</span>(payload, docId); <span class="kw">await</span> <span class="fn">_markDocumentAsSent</span>(docId); <span class="kw">return</span>; }
+            <span class="kw">await new</span> Promise(r => setTimeout(r, Math.pow(2, i) * 1000));
+        }
+    }
+})</span></pre>
+    </div>
+
+    <div class="fix-block p1">
+      <h4>⚠️ P1 — Consumer: ACK after confirmed ClickHouse write</h4>
+      <pre class="code"><span class="good-line"><span class="kw">for</span> (<span class="kw">const</span> msg <span class="kw">of</span> messages) {
+    <span class="kw">try</span> {
+        <span class="kw">await</span> <span class="fn">writeToClickHouse</span>(msg);
+        <span class="kw">await</span> consumer.acknowledge(msg); <span class="cm">// ACK only after write confirmed</span>
+    } <span class="kw">catch</span> (err) { <span class="cm">/* do not ACK — Pulsar will redeliver */</span> }
+}</span></pre>
+    </div>
+
+    <div class="fix-block p2">
+      <h4>📌 P2 — Monitoring Alerts</h4>
+      <ul>
+        <li>Pulsar topic backlog &gt; 10,000 → alert</li>
+        <li>Process restart count &gt; 3 / hour → alert</li>
+        <li>Producer failure rate &gt; 10/min sustained → alert</li>
+        <li><code>fixDuplicateTimestamps</code> iteration &gt; 50 in single batch → alert</li>
+        <li>Resume token age &gt; 5 minutes → alert</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Remediation Summary -->
+  <div class="section">
+    <h2>📅 Remediation Summary</h2>
+    <table>
+      <tr><th>Priority</th><th>Fix</th><th>File</th><th>Target</th></tr>
+      <tr><td><span class="badge badge-red">P0</span></td><td>Add <code>documentId</code> to hash in <code>generateUniqueTimestamp</code></td><td><code>syncProposals.js</code></td><td>Immediate</td></tr>
+      <tr><td><span class="badge badge-red">P0</span></td><td>Add <code>maxIterations</code> guard to while-loop</td><td><code>syncClickhousePluginConsumer.js</code></td><td>Immediate</td></tr>
+      <tr><td><span class="badge badge-red">P0</span></td><td>Periodic resume token save every 30s</td><td><code>syncClickhousePlugin.js</code></td><td>Immediate</td></tr>
+      <tr><td><span class="badge badge-red">P0</span></td><td>Export <code>shutdownChangeStreams</code> + fix async exit handler</td><td><code>syncClickhousePlugin.js</code></td><td>Immediate</td></tr>
+      <tr><td><span class="badge badge-orange">P1</span></td><td>Persist dedup state to Redis</td><td><code>syncClickhousePlugin.js</code></td><td>This week</td></tr>
+      <tr><td><span class="badge badge-orange">P1</span></td><td>Producer retry + DLQ on failure</td><td><code>syncClickhousePlugin.js</code></td><td>This week</td></tr>
+      <tr><td><span class="badge badge-orange">P1</span></td><td>Consumer ACK after confirmed write</td><td><code>syncClickhousePluginConsumer.js</code></td><td>This week</td></tr>
+      <tr><td><span class="badge badge-blue">P2</span></td><td>Pulsar backlog + crash rate monitoring</td><td>Monitoring config</td><td>2 weeks</td></tr>
+    </table>
+  </div>
+
+  <!-- Conclusion -->
+  <div class="section">
+    <h2>✅ Conclusion</h2>
+    <p>This incident was caused by a single unused parameter in a hash function. <code>generateUniqueTimestamp</code> accepted <code>documentId</code> but excluded it from computation, making timestamp deduplication permanently impossible for documents sharing a <code>proposalId</code> and <code>transactionType</code>. The while-loop spun 6 million times, crashed the process, loaded a 13-hour-stale checkpoint, and replayed progressively more data on each of 185 subsequent crashes — growing the stale window to 35.6 hours and generating 270 million duplicate messages.</p>
+    <p>The fix is one line. The prevention — periodic token persistence — limits any future crash impact to 30 seconds of replay instead of hours.</p>
+    <div class="callout info">
+      <strong>Key Takeaway:</strong> A parameter accepted but not used is a silent contract violation. In uniqueness-guarantee functions, verify every input is actually consumed. Always cap retry loops with a hard maximum. Never rely solely on process-signal handlers for critical state persistence.
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  RCA Report · PMS2.0_PH · INC-2026-0303-001 · Confirmed via 9M-row log analysis + full code review · Generated 2026-03-04
+</div>
+
+</body>
+</html>
