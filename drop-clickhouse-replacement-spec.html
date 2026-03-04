@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Spec: Drop ClickHouse &mdash; Replace with Optimized MongoDB Analytics</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-2: #334155;
+            --border: #475569;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-dim: #0c4a6e;
+            --red: #f87171;
+            --red-dim: #7f1d1d;
+            --green: #4ade80;
+            --green-dim: #14532d;
+            --yellow: #fbbf24;
+            --yellow-dim: #713f12;
+            --orange: #fb923c;
+            --purple: #a78bfa;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            padding: 2rem;
+        }
+
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        header {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        header .subtitle { color: var(--text-muted); font-size: 1rem; }
+
+        .meta {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            flex-wrap: wrap;
+        }
+
+        .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+            margin: 3rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--surface-2);
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 2rem 0 0.75rem;
+        }
+
+        h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
+            margin: 1.5rem 0 0.5rem;
+        }
+
+        p { margin-bottom: 1rem; color: var(--text); }
+
+        .callout {
+            border-left: 3px solid var(--accent);
+            background: var(--surface);
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .callout.danger { border-left-color: var(--red); }
+        .callout.success { border-left-color: var(--green); }
+        .callout.warning { border-left-color: var(--yellow); }
+        .callout.info { border-left-color: var(--purple); }
+
+        .callout .label {
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .callout.danger .label { color: var(--red); }
+        .callout.success .label { color: var(--green); }
+        .callout.warning .label { color: var(--yellow); }
+        .callout.info .label { color: var(--purple); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            padding: 0.6rem 0.8rem;
+            border: 1px solid var(--surface-2);
+            text-align: left;
+        }
+
+        th {
+            background: var(--surface);
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        td { background: var(--bg); }
+        tr:hover td { background: var(--surface); }
+
+        code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: var(--surface);
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.85em;
+            color: var(--orange);
+        }
+
+        pre {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 6px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: var(--text);
+        }
+
+        .keyword { color: var(--purple); font-weight: 600; }
+        .fn { color: var(--accent); }
+        .str { color: var(--green); }
+        .comment { color: var(--text-muted); font-style: italic; }
+        .num { color: var(--orange); }
+        .del { color: var(--red); text-decoration: line-through; opacity: 0.7; }
+        .add { color: var(--green); }
+
+        ul, ol {
+            margin: 0.75rem 0 1rem 1.5rem;
+            color: var(--text);
+        }
+
+        li { margin-bottom: 0.4rem; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .badge-red { background: var(--red-dim); color: var(--red); }
+        .badge-green { background: var(--green-dim); color: var(--green); }
+        .badge-yellow { background: var(--yellow-dim); color: var(--yellow); }
+        .badge-blue { background: var(--accent-dim); color: var(--accent); }
+
+        .diagram-box {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+
+        .diagram-box pre {
+            text-align: left;
+            border: none;
+            background: none;
+            margin: 0;
+            font-size: 0.8rem;
+        }
+
+        .flow-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 0.75rem 0;
+            flex-wrap: wrap;
+        }
+
+        .flow-node {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        .node-mongo { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+        .node-pulsar { background: var(--yellow-dim); color: var(--yellow); border: 1px solid var(--yellow); }
+        .node-ch { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+        .node-report { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); }
+        .node-cron { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
+
+        .phase-card {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+
+        .phase-card h4 {
+            margin-top: 0;
+            color: var(--accent);
+        }
+
+        .file-path {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .vs-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .vs-col {
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 1.25rem;
+            border: 1px solid var(--surface-2);
+        }
+
+        .vs-col h4 { margin-top: 0; }
+        .vs-col.before h4 { color: var(--red); }
+        .vs-col.after h4 { color: var(--green); }
+
+        @media (max-width: 768px) {
+            .vs-grid { grid-template-columns: 1fr; }
+            .meta { flex-direction: column; gap: 0.5rem; }
+        }
+
+        .toc {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .toc h3 { margin-top: 0; }
+
+        .toc ol {
+            margin: 0.5rem 0 0 1.5rem;
+        }
+
+        .toc a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .toc a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <header>
+        <h1>Drop ClickHouse &mdash; Replace with Optimized MongoDB Analytics</h1>
+        <p class="subtitle">Eliminate the entire ClickHouse sync pipeline by leveraging the existing MongoDB analytics replica with compound indexes and pre-aggregated summaries.</p>
+        <div class="meta">
+            <span>Author: Engineering</span>
+            <span>Date: 2026-03-03</span>
+            <span>Status: <span class="badge badge-yellow">Proposed</span></span>
+            <span>Data Scale: 10M&ndash;100M records/month</span>
+        </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <!-- TABLE OF CONTENTS                                            -->
+    <!-- ============================================================ -->
+    <nav class="toc">
+        <h3>Table of Contents</h3>
+        <ol>
+            <li><a href="#s1">Executive Summary</a></li>
+            <li><a href="#s2">Current Architecture &amp; Problems</a></li>
+            <li><a href="#s3">Why This Works: Existing Infrastructure</a></li>
+            <li><a href="#s4">Proposed Architecture</a></li>
+            <li><a href="#s5">Optimization 1: Compound Indexes on Analytics Replica</a></li>
+            <li><a href="#s6">Optimization 2: Pre-Aggregated Summary Collections</a></li>
+            <li><a href="#s7">Optimization 3: Time-Chunked Aggregation</a></li>
+            <li><a href="#s8">Route Migration Strategy</a></li>
+            <li><a href="#s9">What Gets Deleted (Full Inventory)</a></li>
+            <li><a href="#s10">ClickHouse &rarr; MongoDB Endpoint Mapping</a></li>
+            <li><a href="#s11">Implementation Phases</a></li>
+            <li><a href="#s12">Risk Mitigation</a></li>
+            <li><a href="#s13">Expected Impact</a></li>
+        </ol>
+    </nav>
+
+    <!-- ============================================================ -->
+    <!-- 1. EXECUTIVE SUMMARY                                         -->
+    <!-- ============================================================ -->
+    <h2 id="s1">1. Executive Summary</h2>
+
+    <p>
+        The current system maintains a complex sync pipeline (MongoDB &rarr; Change Streams &rarr; Pulsar &rarr; Consumer + Populate &rarr; ClickHouse)
+        to replicate 4 collections for reporting. This pipeline suffers from <strong>high MongoDB read load</strong> (double-reads via
+        <code>fullDocument: 'updateLookup'</code> and heavy <code>.populate()</code> calls), <strong>persistent deduplication bugs</strong>,
+        and <strong>operational complexity</strong> across 5+ scheduler jobs, a Pulsar consumer, and a dedicated PM2 worker.
+    </p>
+
+    <p>
+        The key insight is that <strong>the MongoDB-based reports already exist and work</strong>. The codebase has a separate
+        <code>analyticDB</code> connection pointing to a dedicated MongoDB analytics replica, with <code>*Analytic</code> models
+        for all 4 collections, and complete aggregation pipelines under <code>server/src/components/report/</code>.
+        The ClickHouse report endpoints under <code>reportClickhouse/</code> are a parallel copy of the same logic rewritten in SQL.
+    </p>
+
+    <div class="callout success">
+        <div class="label">Proposal</div>
+        <p style="margin-bottom:0;">
+            Drop ClickHouse entirely. Optimize the existing MongoDB analytics replica with compound indexes and
+            pre-aggregated summary collections. Reroute all <code>/clickhouse-*</code> endpoints to the existing
+            MongoDB report handlers via a feature flag. Remove the entire sync pipeline.
+        </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 2. CURRENT ARCHITECTURE & PROBLEMS                           -->
+    <!-- ============================================================ -->
+    <h2 id="s2">2. Current Architecture &amp; Problems</h2>
+
+    <h3>2.1 Current Data Flow (Dual Path)</h3>
+
+    <div class="diagram-box">
+        <p style="font-weight:600; color:var(--red); margin-bottom:1rem;">CURRENT: Two parallel reporting paths</p>
+
+        <div class="flow-row">
+            <span class="flow-node node-mongo">MongoDB Primary</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-pulsar">Change Streams</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-pulsar">Pulsar Queue</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-ch">Consumer + Populate</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-ch">ClickHouse</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-report">/clickhouse-report/*</span>
+        </div>
+
+        <div class="flow-row">
+            <span class="flow-node node-mongo">MongoDB Primary</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-cron">Schedulers (1&ndash;10 min)</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-ch">ClickHouse</span>
+        </div>
+
+        <div style="border-top: 1px dashed var(--border); margin: 1rem 0; padding-top: 1rem;">
+            <div class="flow-row">
+                <span class="flow-node node-mongo">MongoDB Primary</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-node node-mongo">Analytics Replica (built-in sync)</span>
+                <span class="flow-arrow">&rarr;</span>
+                <span class="flow-node node-report">/report/*</span>
+            </div>
+        </div>
+    </div>
+
+    <h3>2.2 Problems with the ClickHouse Path</h3>
+
+    <table>
+        <thead>
+            <tr><th>Problem</th><th>Root Cause</th><th>Impact</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge badge-red">High</span> Double-reads on MongoDB</td>
+                <td><code>fullDocument: 'updateLookup'</code> in change streams forces an extra read on every update event</td>
+                <td>Increased load on MongoDB primary</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">High</span> Heavy <code>.populate()</code> calls</td>
+                <td>Consumer fetches full documents then runs 7+ nested populate calls per batch to denormalize for ClickHouse</td>
+                <td>Massive MongoDB read amplification</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">High</span> Deduplication failures</td>
+                <td><code>generateUniqueTimestamp()</code> actively defeats <code>ReplacingMergeTree</code> dedup by modifying <code>completeTime</code></td>
+                <td>Duplicate rows in ClickHouse reports</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-yellow">Medium</span> Data loss risk</td>
+                <td>Pulsar messages acknowledged <em>before</em> processing completes</td>
+                <td>Failed batches lose data silently</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-yellow">Medium</span> Redundant sync paths</td>
+                <td>Change streams + schedulers + direct Pulsar publish in <code>transactionAction.js</code> all sync the same data</td>
+                <td>Wasted compute, harder to debug</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-yellow">Medium</span> Operational complexity</td>
+                <td>5 scheduler jobs + 1 Pulsar consumer + 2 PM2 configs + ClickHouse infra to maintain</td>
+                <td>High maintenance burden</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <!-- 3. WHY THIS WORKS                                            -->
+    <!-- ============================================================ -->
+    <h2 id="s3">3. Why This Works: Existing Infrastructure</h2>
+
+    <div class="callout info">
+        <div class="label">Key Discovery</div>
+        <p style="margin-bottom:0;">
+            The codebase already has everything needed to run reports without ClickHouse.
+            The MongoDB analytics path was the <em>original</em> implementation; ClickHouse was added later as a "faster" layer.
+        </p>
+    </div>
+
+    <h3>3.1 Separate Analytics DB Connection</h3>
+    <p class="file-path">server/src/db/connect.js</p>
+    <pre><code><span class="keyword">const</span> pmsDB = <span class="fn">createConnection</span>(config?.PMS_DB_URL, <span class="str">"pmsDB"</span>);
+<span class="keyword">const</span> analyticDB = <span class="fn">createConnection</span>(config?.PMS_ANALYTIC_DB_URL, <span class="str">"pmsAnalyticDB"</span>);
+
+<span class="keyword">const</span> dbConnections = {
+    <span class="comment">// ... operational DBs ...</span>
+    proposalDepositsAnalyticDB: commonAnalyticDB.<span class="fn">useDb</span>(<span class="str">'proposalDeposits'</span>),
+    proposalMerchantsAnalyticDB: commonAnalyticDB.<span class="fn">useDb</span>(<span class="str">'proposalMerchants'</span>),
+    proposalWithdrawalsAnalyticDB: commonAnalyticDB.<span class="fn">useDb</span>(<span class="str">'proposalWithdrawals'</span>),
+    transactionsAnalyticDB: commonAnalyticDB.<span class="fn">useDb</span>(<span class="str">'transaction'</span>),
+};</code></pre>
+
+    <h3>3.2 Analytic Models (Same Schema, Different Connection)</h3>
+    <p class="file-path">server/src/db/dbModels.js</p>
+    <pre><code>dbModels = {
+    proposalMerchantAnalytic: proposalMerchantAnalytic,
+    proposalDepositAnalytic:  proposalDepositAnalytic,
+    proposalWithdrawalAnalytic: ProposalWithdrawalAnalytic,
+    transactionAnalytic:      transactionAnalytic,
+};</code></pre>
+
+    <p>Each analytic model uses the same Mongoose schema as its operational counterpart but connects to <code>PMS_ANALYTIC_DB_URL</code>:</p>
+    <pre><code><span class="comment">// transaction.js</span>
+<span class="keyword">const</span> transaction = connectToDb.transactionsDB.<span class="fn">model</span>(<span class="str">"Transaction"</span>, transactionSchema, <span class="str">"transactions"</span>);
+<span class="keyword">const</span> transactionAnalytic = connectToDb.transactionsAnalyticDB.<span class="fn">model</span>(<span class="str">"Transaction"</span>, transactionSchema, <span class="str">"transactions"</span>);</code></pre>
+
+    <h3>3.3 Existing MongoDB Report Pipelines</h3>
+    <p>Complete aggregation-based reports already exist under <code>server/src/components/report/</code>:</p>
+    <table>
+        <thead>
+            <tr><th>Report Module</th><th>MongoDB Endpoint</th><th>Uses Analytic Model</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Payment Duration</td><td><code>/report/payment-duration</code></td><td><code>transactionAnalytic</code>, <code>proposalWithdrawalAnalytic</code></td></tr>
+            <tr><td>Deposit Duration</td><td><code>/report/timeout/deposit-duration</code></td><td><code>proposalDepositAnalytic</code>, <code>transactionAnalytic</code></td></tr>
+            <tr><td>Merchant Duration</td><td><code>/report/timeout/merchant-duration</code></td><td><code>proposalMerchantAnalytic</code></td></tr>
+            <tr><td>Online Top-Up Trend</td><td><code>/report/online-topup-trend/*</code></td><td><code>proposalMerchantAnalytic</code></td></tr>
+            <tr><td>Payment API Report</td><td><code>/report/payment/api/*</code></td><td><code>transactionAnalytic</code>, <code>proposalWithdrawalAnalytic</code></td></tr>
+        </tbody>
+    </table>
+
+    <p>These reports use MongoDB aggregation pipelines with <code>.aggregate()</code>, <code>.option({ maxTimeMS: 60000 })</code>,
+    <code>.read("sp")</code> for secondary reads, and <code>.hint()</code> for index hints.</p>
+
+    <!-- ============================================================ -->
+    <!-- 4. PROPOSED ARCHITECTURE                                     -->
+    <!-- ============================================================ -->
+    <h2 id="s4">4. Proposed Architecture</h2>
+
+    <div class="diagram-box">
+        <p style="font-weight:600; color:var(--green); margin-bottom:1rem;">PROPOSED: Single path via MongoDB analytics replica</p>
+
+        <div class="flow-row">
+            <span class="flow-node node-mongo">MongoDB Primary</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-mongo" style="border-width:2px;">Analytics Replica (built-in replication, ~seconds lag)</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-report">Unified Reports /report/* and /clickhouse-report/*</span>
+        </div>
+
+        <div class="flow-row" style="margin-top:1rem;">
+            <span class="flow-node node-cron">Nightly Pre-Aggregation Cron (02:00)</span>
+            <span class="flow-arrow">&rarr;</span>
+            <span class="flow-node node-mongo">Summary Collections (payment/deposit/merchant _duration_daily)</span>
+        </div>
+    </div>
+
+    <div class="vs-grid">
+        <div class="vs-col before">
+            <h4>Before (ClickHouse Path)</h4>
+            <ul>
+                <li>Change streams with <code>fullDocument: 'updateLookup'</code></li>
+                <li>Pulsar queue + consumer</li>
+                <li>Heavy <code>.populate()</code> for denormalization</li>
+                <li>5 scheduler jobs (1&ndash;10 min intervals)</li>
+                <li>ClickHouse <code>ReplacingMergeTree</code> with dedup bugs</li>
+                <li>Separate PM2 worker process</li>
+                <li>Minutes of sync lag + data loss risk</li>
+            </ul>
+        </div>
+        <div class="vs-col after">
+            <h4>After (MongoDB Analytics)</h4>
+            <ul>
+                <li>Built-in replica sync (~seconds lag)</li>
+                <li>No Pulsar, no consumer, no change streams</li>
+                <li>No populate needed (queries join at read time via <code>$lookup</code> or pre-existing pipelines)</li>
+                <li>1 nightly pre-aggregation cron</li>
+                <li>Zero dedup issues (replica is exact copy)</li>
+                <li>No extra PM2 workers</li>
+                <li>Compound indexes on analytics replica only</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 5. COMPOUND INDEXES                                          -->
+    <!-- ============================================================ -->
+    <h2 id="s5">5. Optimization 1: Compound Indexes on Analytics Replica</h2>
+
+    <div class="callout success">
+        <div class="label">Zero Impact on Writes</div>
+        <p style="margin-bottom:0;">
+            All indexes below are created <strong>only on the analytics replica</strong> (<code>PMS_ANALYTIC_DB_URL</code>).
+            They do not affect write performance on the primary MongoDB instance.
+        </p>
+    </div>
+
+    <p>The existing single-field indexes are insufficient for the report aggregation patterns. These compound indexes
+    match the <code>$match</code> stages in the report pipelines:</p>
+
+    <h4>Transaction Collection</h4>
+    <table>
+        <thead><tr><th>Index</th><th>Report Usage</th></tr></thead>
+        <tbody>
+            <tr><td><code>{ createdAt: 1, transactionType: 1, platform: 1 }</code></td><td>Payment duration, Payment API report</td></tr>
+            <tr><td><code>{ fpmsTime: 1, transactionType: 1 }</code></td><td>Duration calculations (fpms &rarr; complete)</td></tr>
+            <tr><td><code>{ pmsTime: 1, transactionType: 1 }</code></td><td>Duration calculations (pms &rarr; complete)</td></tr>
+            <tr><td><code>{ createdAt: 1, transactionType: 1, paymentApi: 1 }</code></td><td>Payment API report by API</td></tr>
+        </tbody>
+    </table>
+
+    <h4>proposalWithdrawal Collection</h4>
+    <table>
+        <thead><tr><th>Index</th><th>Report Usage</th></tr></thead>
+        <tbody>
+            <tr><td><code>{ createdAt: 1, status: 1, type: 1 }</code></td><td>Payment duration by status/type</td></tr>
+            <tr><td><code>{ fpmsTime: 1, status: 1 }</code></td><td>Duration reports (fpms &rarr; complete)</td></tr>
+            <tr><td><code>{ completeTime: 1, status: 1 }</code></td><td>Completed proposal queries</td></tr>
+            <tr><td><code>{ pmsTime: 1, status: 1, type: 1 }</code></td><td>Duration reports (pms &rarr; complete)</td></tr>
+        </tbody>
+    </table>
+
+    <h4>proposalDeposit Collection</h4>
+    <table>
+        <thead><tr><th>Index</th><th>Report Usage</th></tr></thead>
+        <tbody>
+            <tr><td><code>{ createdAt: 1, status: 1, paymentMethod: 1 }</code></td><td>Deposit duration by method</td></tr>
+            <tr><td><code>{ depositTime: 1, status: 1 }</code></td><td>Deposit timing reports</td></tr>
+            <tr><td><code>{ completeTime: 1, status: 1 }</code></td><td>Completed deposit queries</td></tr>
+        </tbody>
+    </table>
+
+    <h4>proposalMerchant Collection</h4>
+    <table>
+        <thead><tr><th>Index</th><th>Report Usage</th></tr></thead>
+        <tbody>
+            <tr><td><code>{ createdAt: 1, status: 1, device: 1 }</code></td><td>Online top-up trend</td></tr>
+            <tr><td><code>{ fpmsTime: 1, status: 1 }</code></td><td>Merchant duration reports</td></tr>
+            <tr><td><code>{ thirdPartyResponseTime: 1, status: 1 }</code></td><td>Merchant response time analysis</td></tr>
+        </tbody>
+    </table>
+
+    <p>Index creation is idempotent (<code>createIndex</code> is safe to run multiple times). Use <code>background: true</code>
+    to avoid blocking reads during creation.</p>
+
+    <!-- ============================================================ -->
+    <!-- 6. PRE-AGGREGATED SUMMARIES                                  -->
+    <!-- ============================================================ -->
+    <h2 id="s6">6. Optimization 2: Pre-Aggregated Summary Collections</h2>
+
+    <p>For the heaviest reports (duration bucket analysis across months), create nightly pre-aggregation jobs that
+    write daily summaries to dedicated collections. This replaces ClickHouse materialized views.</p>
+
+    <h3>6.1 Summary Collections</h3>
+    <table>
+        <thead><tr><th>Collection</th><th>Source</th><th>Group By</th><th>Metrics</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><code>payment_duration_daily</code></td>
+                <td>proposalWithdrawals (analytic)</td>
+                <td>date, minuteCategory, platform, type</td>
+                <td>count, totalAmount, autoMatchCount</td>
+            </tr>
+            <tr>
+                <td><code>deposit_duration_daily</code></td>
+                <td>proposalDeposits (analytic)</td>
+                <td>date, minuteCategory, platform, paymentMethod, api</td>
+                <td>count, totalAmount</td>
+            </tr>
+            <tr>
+                <td><code>merchant_duration_daily</code></td>
+                <td>proposalMerchants (analytic)</td>
+                <td>date, minuteCategory, platform, device</td>
+                <td>count, totalAmount</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>6.2 Duration Buckets</h3>
+    <p>Matching the existing ClickHouse <code>multiIf</code> / MongoDB <code>$switch</code> logic:</p>
+    <pre><code><span class="comment">// Duration buckets in minutes</span>
+<span class="keyword">const</span> DURATION_BUCKETS = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">5</span>, <span class="num">8</span>, <span class="num">10</span>, <span class="num">15</span>, <span class="num">20</span>, <span class="num">30</span>, <span class="num">60</span>];
+<span class="comment">// Category 61 = over 60 minutes</span>
+
+<span class="comment">// MongoDB $switch equivalent:</span>
+{ <span class="fn">$switch</span>: {
+    branches: DURATION_BUCKETS.<span class="fn">map</span>(min =&gt; ({
+        <span class="keyword">case</span>: { <span class="fn">$lte</span>: [<span class="str">"$durationMs"</span>, min * <span class="num">60000</span>] },
+        then: min
+    })),
+    <span class="keyword">default</span>: <span class="num">61</span>
+}}</code></pre>
+
+    <h3>6.3 Nightly Cron Schedule</h3>
+    <p>A single scheduler job runs at <strong>02:00 daily</strong>, aggregates the previous day's data from raw collections,
+    and upserts into summary collections using <code>bulkWrite</code> with <code>upsert: true</code>.</p>
+
+    <pre><code><span class="comment">// Scheduler config</span>
+<span class="keyword">const</span> schedulerRule = { hour: <span class="num">2</span>, minute: <span class="num">0</span> };
+<span class="fn">runScheduler</span>(runPreAggregation, {
+    schedulerRule,
+    maxExecutionTimeInSec: <span class="num">600</span>,
+    jobName: <span class="str">'preAggregateDurationSummaries'</span>
+});</code></pre>
+
+    <p>Reports check the summary collection first for historical data; fall back to raw aggregation for today's (not yet summarized) data.</p>
+
+    <!-- ============================================================ -->
+    <!-- 7. TIME-CHUNKED AGGREGATION                                  -->
+    <!-- ============================================================ -->
+    <h2 id="s7">7. Optimization 3: Time-Chunked Aggregation</h2>
+
+    <p>The codebase already has <code>splitQueryByChunks</code> in the payment duration report that splits large date ranges
+    into 6-hour chunks and runs them in parallel:</p>
+
+    <p class="file-path">server/src/components/report/paymentDuration/paymentDurationReportAction.js</p>
+    <pre><code><span class="keyword">const</span> splitQueryByChunks = (query, timeField = <span class="str">'pmsTime'</span>, hoursPerChunk = <span class="num">6</span>) =&gt; {
+    <span class="comment">// Splits a date range into N chunks of hoursPerChunk hours each</span>
+    <span class="comment">// Returns array of queries, each covering one chunk</span>
+    <span class="comment">// Enables parallel execution via Promise.all()</span>
+};</code></pre>
+
+    <div class="callout info">
+        <div class="label">Recommendation</div>
+        <p style="margin-bottom:0;">
+            Apply the <code>splitQueryByChunks</code> pattern to all report types (deposit duration, merchant duration, online top-up)
+            for consistent performance on large date ranges.
+        </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 8. ROUTE MIGRATION STRATEGY                                  -->
+    <!-- ============================================================ -->
+    <h2 id="s8">8. Route Migration Strategy</h2>
+
+    <h3>8.1 Feature Flag</h3>
+    <p>Add <code>USE_MONGODB_REPORTS</code> to <code>server/src/config/env.js</code>:</p>
+    <pre><code>SKIP_CLICKHOUSE_SYNC: <span class="keyword">true</span>,   <span class="comment">// disable change streams + Pulsar</span>
+USE_MONGODB_REPORTS: <span class="keyword">true</span>,    <span class="comment">// route /clickhouse-* to MongoDB handlers</span></code></pre>
+
+    <h3>8.2 Router-Level Handler Selection</h3>
+    <p>Modify each ClickHouse router to delegate to the MongoDB handler when the flag is enabled.
+    This keeps the same URL paths so <strong>no client-side changes are needed</strong>:</p>
+
+    <pre><code><span class="comment">// Example: reportClickhouse/paymentDuration/paymentDurationReportRouter.js</span>
+<span class="keyword">import</span> ChHandler <span class="keyword">from</span> <span class="str">"./paymentDurationReportHandler"</span>;
+<span class="keyword">import</span> MongoHandler <span class="keyword">from</span> <span class="str">"../../report/paymentDuration/paymentDurationReportHandler"</span>;
+<span class="keyword">import</span> env <span class="keyword">from</span> <span class="str">"../../../config/env"</span>;
+
+<span class="keyword">const</span> <span class="fn">selectHandler</span> = (chHandler, mongoHandler) =&gt; (req, res, next) =&gt; {
+    <span class="keyword">const</span> handler = env.<span class="fn">config</span>().USE_MONGODB_REPORTS ? mongoHandler : chHandler;
+    <span class="keyword">return</span> <span class="fn">handler</span>(req, res, next);
+};
+
+router.<span class="fn">route</span>(<span class="str">'/clickhouse-report/payment-duration'</span>)
+    .<span class="fn">get</span>(auth, <span class="fn">selectHandler</span>(ChHandler.getStatistic, MongoHandler.getStatistic));</code></pre>
+
+    <h3>8.3 Routers to Modify</h3>
+    <table>
+        <thead><tr><th>ClickHouse Router</th><th>MongoDB Handler Target</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><code>reportClickhouse/paymentDuration/</code></td>
+                <td><code>report/paymentDuration/paymentDurationReportHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>reportClickhouse/depositDuration/</code></td>
+                <td><code>report/depositDuration/depositDurationReportHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>reportClickhouse/merchantDuration/</code></td>
+                <td><code>report/merchantDuration/merchantDurationReportHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>reportClickhouse/onlineTopUpTrend/</code></td>
+                <td><code>report/onlineTopUpTrend/onlineTopUpTrendHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>reportClickhouse/paymentApi/</code></td>
+                <td><code>report/paymentReport/paymentReportHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>clickhouseTransaction/</code></td>
+                <td><code>transaction/transactionHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>clickhouseProposalDeposit/</code></td>
+                <td><code>proposalDeposit/proposalDepositHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>clickhouseProposalWithdrawal/</code></td>
+                <td><code>proposalWithdrawal/proposalWithdrawalHandler</code></td>
+            </tr>
+            <tr>
+                <td><code>merchantClickhouseProposal/</code></td>
+                <td><code>merchantProposal/merchantProposalHandler</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <!-- 9. WHAT GETS DELETED                                         -->
+    <!-- ============================================================ -->
+    <h2 id="s9">9. What Gets Deleted (Full Inventory)</h2>
+
+    <table>
+        <thead>
+            <tr><th>Component</th><th>File(s)</th><th>Purpose (No Longer Needed)</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="badge badge-red">Sync</span> Change stream producer</td>
+                <td class="file-path">server/src/helpers/syncClickhousePlugin.js</td>
+                <td>Watches MongoDB, pushes to Pulsar</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">Sync</span> Pulsar consumer</td>
+                <td class="file-path">server/src/scheduler/clickHouse/syncClickhousePluginConsumer.js</td>
+                <td>Consumes Pulsar, populates, bulk inserts to ClickHouse</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">Sync</span> Transaction scheduler</td>
+                <td class="file-path">server/src/scheduler/clickHouse/syncTransactions.js</td>
+                <td>Batch sync every 1 minute</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">Sync</span> Proposal schedulers</td>
+                <td class="file-path">server/src/scheduler/clickHouse/syncProposalDeposit.js<br>
+                    server/src/scheduler/clickHouse/syncProposalWithdrawal.js<br>
+                    server/src/scheduler/clickHouse/syncProposalMerchant.js</td>
+                <td>Batch sync every 10 minutes</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">Sync</span> Sync mapping/logic</td>
+                <td class="file-path">server/src/components/clickHouse/action/syncProposals.js</td>
+                <td>Map + populate + dedup logic</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-red">Sync</span> ClickHouse client helper</td>
+                <td class="file-path">server/src/helpers/clickhouseQuery.js<br>
+                    server/src/clickHouse/connect.js</td>
+                <td>ClickHouse connection + query builder</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-yellow">PM2</span> Sync worker config</td>
+                <td class="file-path">server/pm2-worker-syncClickhouse.config.js<br>
+                    pm2-jobs-2.config.js (syncClickhousePluginConsumer entry)</td>
+                <td>Dedicated sync worker process</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-yellow">PM2</span> Old proposal worker</td>
+                <td class="file-path">server/src/scheduler/pulsar/pulsarSyncOldProposalWorker.js</td>
+                <td>Syncs old proposals to ClickHouse</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-blue">Dep</span> ClickHouse client</td>
+                <td class="file-path">package.json: <code>@clickhouse/client</code></td>
+                <td>npm dependency no longer needed</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-blue">Schema</span> Plugin registration</td>
+                <td class="file-path">transaction.js, proposalDeposit.js, proposalWithdrawal.js, merchantProposal.js</td>
+                <td>Remove <code>.plugin(syncClickhousePlugin, ...)</code> calls</td>
+            </tr>
+            <tr>
+                <td><span class="badge badge-blue">Code</span> Redundant Pulsar publish</td>
+                <td class="file-path">server/src/components/transaction/transactionAction.js</td>
+                <td>Remove direct <code>pulsarHelper.createProducer</code> call for ClickHouse sync after <code>insertMany</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="callout warning">
+        <div class="label">Keep Alive During Migration</div>
+        <p style="margin-bottom:0;">
+            The ClickHouse report endpoint <em>files</em> (under <code>reportClickhouse/</code>, <code>clickhouseTransaction/</code>, etc.)
+            are <strong>not deleted</strong> during migration. They are kept as fallback and modified to delegate to MongoDB handlers
+            via the feature flag. They can be fully removed after validation is complete.
+        </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 10. ENDPOINT MAPPING                                         -->
+    <!-- ============================================================ -->
+    <h2 id="s10">10. ClickHouse &rarr; MongoDB Endpoint Mapping</h2>
+
+    <h3>10.1 Report Endpoints</h3>
+    <table>
+        <thead><tr><th>ClickHouse Endpoint</th><th>MongoDB Equivalent</th></tr></thead>
+        <tbody>
+            <tr><td><code>/clickhouse-report/payment-duration</code></td><td><code>/report/payment-duration</code></td></tr>
+            <tr><td><code>/clickhouse-report/payment-duration/log</code></td><td><code>/report/payment-duration/log</code></td></tr>
+            <tr><td><code>/clickhouse-report/payment-duration/log/export</code></td><td><code>/report/payment-duration/log/export</code></td></tr>
+            <tr><td><code>/clickhouse-report/deposit-duration</code></td><td><code>/report/timeout/deposit-duration/analysed-by-api</code></td></tr>
+            <tr><td><code>/clickhouse-report/timeout/deposit-duration/search</code></td><td><code>/report/timeout/deposit-duration</code></td></tr>
+            <tr><td><code>/clickhouse-report/deposit-duration/log</code></td><td><code>/report/deposit-duration/log</code></td></tr>
+            <tr><td><code>/clickhouse-report/deposit-duration/bank-card</code></td><td><code>/report/deposit-duration/bank-card</code></td></tr>
+            <tr><td><code>/clickhouse-report/timeout/merchant-duration/analyse-by-api</code></td><td><code>/report/timeout/merchant-duration/analyse-by-api</code></td></tr>
+            <tr><td><code>/clickhouse-report/timeout/merchant-duration/search</code></td><td><code>/report/timeout/merchant-duration</code></td></tr>
+            <tr><td><code>/clickhouse-report/merchant-duration/log</code></td><td><code>/report/merchant-duration/log</code></td></tr>
+            <tr><td><code>/clickhouse-report/payment-api</code></td><td><code>/report/payment/api/getPaymentApiData</code></td></tr>
+            <tr><td><code>/clickhouse-report/online-topup-trend</code></td><td><code>/report/online-topup-trend/getOnlineTopUpTrendApiData</code></td></tr>
+            <tr><td><code>/clickhouse-report/online-topup-trend/by-date</code></td><td><code>/report/online-topup-trend/by-date</code></td></tr>
+            <tr><td><code>/clickhouse-report/online-topup-trend/by-date-success-rate</code></td><td><code>/report/online-topup-trend/by-date-success-rate</code></td></tr>
+            <tr><td><code>/clickhouse-report/online-topup-trend/by-account</code></td><td><code>/report/online-topup-trend/by-account</code></td></tr>
+        </tbody>
+    </table>
+
+    <h3>10.2 Table/Download Endpoints</h3>
+    <table>
+        <thead><tr><th>ClickHouse Endpoint</th><th>MongoDB Equivalent</th></tr></thead>
+        <tbody>
+            <tr><td><code>/clickhouseTransaction/table</code></td><td><code>/transactions/table</code></td></tr>
+            <tr><td><code>/clickhouseTransaction/download</code></td><td><code>/transactions/download</code></td></tr>
+            <tr><td><code>/clickhouse-deposit-proposals/table</code></td><td><code>/deposit-proposals/table</code></td></tr>
+            <tr><td><code>/clickhouse-deposit-proposals/total</code></td><td><code>/deposit-proposals/total</code></td></tr>
+            <tr><td><code>/clickhouse-deposit-proposals/download</code></td><td><code>/deposit-proposals/download</code></td></tr>
+            <tr><td><code>/clickhouse-withdraw-proposals/table</code></td><td><code>/withdraw-proposals/table</code></td></tr>
+            <tr><td><code>/clickhouse-withdraw-proposals/download</code></td><td><code>/withdraw-proposals/download</code></td></tr>
+            <tr><td><code>/merchant-clickhouse-proposals/table</code></td><td><code>/merchant-proposals/table</code></td></tr>
+            <tr><td><code>/merchant-clickhouse-proposals/download</code></td><td><code>/merchant-proposals/download</code></td></tr>
+        </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <!-- 11. IMPLEMENTATION PHASES                                    -->
+    <!-- ============================================================ -->
+    <h2 id="s11">11. Implementation Phases</h2>
+
+    <div class="phase-card">
+        <h4>Phase 1: Compound Indexes + Benchmark <span class="badge badge-green">Low Risk</span></h4>
+        <p><strong>Duration:</strong> 1&ndash;2 days</p>
+        <ol>
+            <li>Create compound indexes on the analytics replica (idempotent, zero impact on primary)</li>
+            <li>Run benchmark script comparing MongoDB report results vs ClickHouse report results for correctness and latency</li>
+            <li>Validate that MongoDB reports return equivalent data</li>
+        </ol>
+        <p><strong>Files created:</strong></p>
+        <ul>
+            <li><code>server/src/scripts/createAnalyticIndexes.js</code> &mdash; one-time migration script</li>
+            <li><code>server/src/scripts/benchmarkReports.js</code> &mdash; comparison script</li>
+        </ul>
+    </div>
+
+    <div class="phase-card">
+        <h4>Phase 2: Pre-Aggregated Summaries <span class="badge badge-green">Low Risk</span></h4>
+        <p><strong>Duration:</strong> 2&ndash;3 days</p>
+        <ol>
+            <li>Create nightly pre-aggregation cron job for the 3 duration summary collections</li>
+            <li>Add to PM2 jobs config</li>
+            <li>Backfill historical summaries for the past 6 months</li>
+        </ol>
+        <p><strong>Files created:</strong></p>
+        <ul>
+            <li><code>server/src/scheduler/reportPreAggregation/preAggregateDurationSummaries.js</code></li>
+        </ul>
+        <p><strong>Files modified:</strong></p>
+        <ul>
+            <li><code>server/pm2-jobs.config.js</code> &mdash; add <code>preAggregateDurationSummaries</code> entry</li>
+        </ul>
+    </div>
+
+    <div class="phase-card">
+        <h4>Phase 3: Route Migration with Feature Flag <span class="badge badge-yellow">Medium Risk</span></h4>
+        <p><strong>Duration:</strong> 2&ndash;3 days</p>
+        <ol>
+            <li>Add <code>USE_MONGODB_REPORTS</code> feature flag to <code>env.js</code></li>
+            <li>Modify 9 ClickHouse router files to use <code>selectHandler</code> pattern</li>
+            <li>Test with flag <code>false</code> (no change) then flip to <code>true</code></li>
+            <li>Monitor report accuracy and latency in staging</li>
+        </ol>
+        <p><strong>Files modified:</strong></p>
+        <ul>
+            <li><code>server/src/config/env.js</code></li>
+            <li>9 ClickHouse router files (see Section 8.3)</li>
+        </ul>
+    </div>
+
+    <div class="phase-card">
+        <h4>Phase 4: Disable ClickHouse Sync <span class="badge badge-yellow">Medium Risk</span></h4>
+        <p><strong>Duration:</strong> 1 day</p>
+        <ol>
+            <li>Set <code>SKIP_CLICKHOUSE_SYNC: true</code> in env config</li>
+            <li>Comment out <code>syncClickhousePluginConsumer</code> in <code>pm2-jobs-2.config.js</code></li>
+            <li>Comment out <code>pulsarSyncOldProposalWorker</code> in <code>pm2-worker-syncClickhouse.config.js</code></li>
+            <li>Remove <code>.plugin(syncClickhousePlugin, ...)</code> from 4 model schemas</li>
+            <li>Remove direct Pulsar publish in <code>transactionAction.js</code></li>
+        </ol>
+    </div>
+
+    <div class="phase-card">
+        <h4>Phase 5: Full Cleanup <span class="badge badge-red">After Validation</span></h4>
+        <p><strong>Duration:</strong> 1 day (after 2+ weeks of stable operation)</p>
+        <ol>
+            <li>Remove all ClickHouse sync files (see Section 9)</li>
+            <li>Remove <code>@clickhouse/client</code> from <code>package.json</code></li>
+            <li>Remove <code>clickHouseClient.connect()</code> from <code>schedulerRunner.js</code></li>
+            <li>Remove ClickHouse report endpoint files (or keep as dead code reference)</li>
+            <li>Remove feature flag checks (hardcode MongoDB path)</li>
+        </ol>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 12. RISK MITIGATION                                          -->
+    <!-- ============================================================ -->
+    <h2 id="s12">12. Risk Mitigation</h2>
+
+    <table>
+        <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>MongoDB reports are slower than ClickHouse for some queries</td>
+                <td>Compound indexes + pre-aggregated summaries bring most queries under 10s. For any outlier, add a specific pre-aggregated collection rather than restoring the entire ClickHouse pipeline.</td>
+            </tr>
+            <tr>
+                <td>Analytics replica falls behind under heavy write load</td>
+                <td>MongoDB replica lag is typically &lt;1 second. Monitor with <code>rs.printSlaveReplicationInfo()</code>. The current ClickHouse pipeline has minutes of lag, so this is strictly better.</td>
+            </tr>
+            <tr>
+                <td>Feature flag rollback needed</td>
+                <td>Set <code>USE_MONGODB_REPORTS: false</code> to instantly revert all endpoints to ClickHouse handlers. No deployment needed if using Apollo/Vault config.</td>
+            </tr>
+            <tr>
+                <td>Index creation impacts analytics replica reads</td>
+                <td>Use <code>background: true</code> option. Run during low-traffic hours. Indexes are created once.</td>
+            </tr>
+            <tr>
+                <td>Pre-aggregation cron fails</td>
+                <td>Reports fall back to raw aggregation (slower but correct). Cron failures are logged and can be re-run manually.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- ============================================================ -->
+    <!-- 13. EXPECTED IMPACT                                          -->
+    <!-- ============================================================ -->
+    <h2 id="s13">13. Expected Impact</h2>
+
+    <table>
+        <thead><tr><th>Metric</th><th>Before (ClickHouse)</th><th>After (MongoDB Analytics)</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>MongoDB primary read load</td>
+                <td><span class="badge badge-red">High</span> (change streams + populate + schedulers)</td>
+                <td><span class="badge badge-green">Minimal</span> (only operational queries)</td>
+            </tr>
+            <tr>
+                <td>Sync lag</td>
+                <td>Minutes (Pulsar + consumer batching)</td>
+                <td>~Seconds (built-in replica sync)</td>
+            </tr>
+            <tr>
+                <td>Deduplication issues</td>
+                <td><span class="badge badge-red">Persistent</span> (generateUniqueTimestamp defeats ReplacingMergeTree)</td>
+                <td><span class="badge badge-green">None</span> (replica is exact copy)</td>
+            </tr>
+            <tr>
+                <td>Infrastructure components</td>
+                <td>MongoDB + Pulsar + ClickHouse + 5 schedulers + 2 PM2 workers</td>
+                <td>MongoDB + 1 nightly cron</td>
+            </tr>
+            <tr>
+                <td>Report query latency</td>
+                <td>~1&ndash;5s (ClickHouse columnar scan)</td>
+                <td>~2&ndash;15s (MongoDB aggregation with compound indexes, &lt;5s with pre-aggregated summaries)</td>
+            </tr>
+            <tr>
+                <td>Operational complexity</td>
+                <td><span class="badge badge-red">High</span></td>
+                <td><span class="badge badge-green">Low</span></td>
+            </tr>
+            <tr>
+                <td>Data accuracy</td>
+                <td><span class="badge badge-yellow">Dedup bugs</span></td>
+                <td><span class="badge badge-green">Exact copy</span></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="callout success">
+        <div class="label">Bottom Line</div>
+        <p style="margin-bottom:0;">
+            Trade a small increase in report query latency (2&ndash;15s vs 1&ndash;5s) for: zero dedup bugs, zero sync lag,
+            massively reduced MongoDB primary load, elimination of Pulsar/ClickHouse infrastructure, and a single nightly cron
+            replacing 5 scheduler jobs + 1 Pulsar consumer + 2 PM2 workers.
+        </p>
+    </div>
+
+</div>
+</body>
+</html>

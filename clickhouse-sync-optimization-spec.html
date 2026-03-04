@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical Spec: MongoDB → ClickHouse Sync Optimization</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-2: #334155;
+            --border: #475569;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-dim: #0c4a6e;
+            --red: #f87171;
+            --red-dim: #7f1d1d;
+            --green: #4ade80;
+            --green-dim: #14532d;
+            --yellow: #fbbf24;
+            --yellow-dim: #713f12;
+            --orange: #fb923c;
+            --purple: #a78bfa;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        header .subtitle {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .meta {
+            display: flex;
+            gap: 2rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+            margin: 3rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--surface-2);
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin: 2rem 0 0.75rem;
+        }
+
+        h4 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
+            margin: 1.5rem 0 0.5rem;
+        }
+
+        p { margin-bottom: 1rem; color: var(--text); }
+
+        .callout {
+            border-left: 3px solid var(--accent);
+            background: var(--surface);
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .callout.warning {
+            border-left-color: var(--yellow);
+            background: var(--yellow-dim);
+        }
+
+        .callout.danger {
+            border-left-color: var(--red);
+            background: var(--red-dim);
+        }
+
+        .callout.success {
+            border-left-color: var(--green);
+            background: var(--green-dim);
+        }
+
+        .callout .label {
+            font-weight: 700;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.4rem;
+        }
+
+        .callout.warning .label { color: var(--yellow); }
+        .callout.danger .label { color: var(--red); }
+        .callout.success .label { color: var(--green); }
+
+        code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: var(--surface-2);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.88em;
+            color: var(--orange);
+        }
+
+        pre {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: var(--text);
+        }
+
+        .keyword { color: var(--purple); }
+        .string { color: var(--green); }
+        .comment { color: var(--text-muted); font-style: italic; }
+        .fn { color: var(--accent); }
+        .num { color: var(--orange); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background: var(--surface-2);
+            color: var(--accent);
+            font-weight: 600;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        td {
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid var(--surface-2);
+            vertical-align: top;
+        }
+
+        tr:hover td { background: var(--surface); }
+
+        .tag {
+            display: inline-block;
+            padding: 0.15em 0.6em;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .tag-red { background: var(--red-dim); color: var(--red); }
+        .tag-green { background: var(--green-dim); color: var(--green); }
+        .tag-yellow { background: var(--yellow-dim); color: var(--yellow); }
+        .tag-blue { background: var(--accent-dim); color: var(--accent); }
+
+        ul, ol {
+            margin: 0.5rem 0 1rem 1.5rem;
+        }
+
+        li { margin-bottom: 0.4rem; }
+
+        .diagram {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre;
+            color: var(--text-muted);
+        }
+
+        .diagram .highlight { color: var(--accent); font-weight: 600; }
+        .diagram .bad { color: var(--red); font-weight: 600; }
+        .diagram .good { color: var(--green); font-weight: 600; }
+        .diagram .warn { color: var(--yellow); }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .col-box {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+
+        .col-box h4 {
+            margin-top: 0;
+            margin-bottom: 0.75rem;
+        }
+
+        .col-box.current { border-color: var(--red); }
+        .col-box.proposed { border-color: var(--green); }
+
+        .section-num {
+            color: var(--accent);
+            font-weight: 700;
+            margin-right: 0.5rem;
+        }
+
+        .file-ref {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-family: monospace;
+        }
+
+        .impact-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        .impact-card {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .impact-card .number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--green);
+        }
+
+        .impact-card .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .toc {
+            background: var(--surface);
+            border: 1px solid var(--surface-2);
+            border-radius: 8px;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            color: var(--text);
+        }
+
+        .toc ol { margin-bottom: 0; }
+
+        .toc a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .toc a:hover { text-decoration: underline; }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin: 2.5rem 0 1rem;
+        }
+
+        .step-badge {
+            background: var(--accent-dim);
+            color: var(--accent);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.3em 0.8em;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .two-col { grid-template-columns: 1fr; }
+            .impact-grid { grid-template-columns: 1fr; }
+            .meta { flex-direction: column; gap: 0.5rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+<!-- ============================================================ -->
+<!-- HEADER                                                        -->
+<!-- ============================================================ -->
+<header>
+    <h1>MongoDB &rarr; ClickHouse Sync Optimization</h1>
+    <p class="subtitle">Technical Specification &amp; Refactoring Plan</p>
+    <div class="meta">
+        <span><strong>Project:</strong>&nbsp;PMS 2.0</span>
+        <span><strong>Date:</strong>&nbsp;March 2026</span>
+        <span><strong>Status:</strong>&nbsp;Proposal</span>
+    </div>
+</header>
+
+<!-- ============================================================ -->
+<!-- TABLE OF CONTENTS                                             -->
+<!-- ============================================================ -->
+<div class="toc">
+    <h3>Table of Contents</h3>
+    <ol>
+        <li><a href="#s1">Background &amp; Purpose</a></li>
+        <li><a href="#s2">Current Architecture</a></li>
+        <li><a href="#s3">Identified Problems</a></li>
+        <li><a href="#s4">Proposed Architecture</a></li>
+        <li><a href="#s5">Implementation Plan</a></li>
+        <li><a href="#s6">ClickHouse Schema Changes</a></li>
+        <li><a href="#s7">Expected Impact</a></li>
+        <li><a href="#s8">Risks &amp; Mitigations</a></li>
+        <li><a href="#s9">Rollout Strategy</a></li>
+        <li><a href="#s10">File Inventory</a></li>
+    </ol>
+</div>
+
+<!-- ============================================================ -->
+<!-- 1. BACKGROUND                                                 -->
+<!-- ============================================================ -->
+<h2 id="s1"><span class="section-num">1.</span> Background &amp; Purpose</h2>
+
+<p>
+    PMS uses <strong>MongoDB</strong> as the operational database for real-time transactions and proposal management.
+    A copy of completed and in-progress proposals is synced to <strong>ClickHouse</strong> (columnar OLAP database)
+    for <strong>reporting purposes</strong>, primarily querying monthly records for payment duration reports,
+    deposit/withdrawal analytics, and merchant performance.
+</p>
+
+<p>
+    Data is <strong>pre-joined (denormalized)</strong> before insertion into ClickHouse. This means reference data
+    such as platform names, bank names, merchant gateway codes, and user names are resolved at sync time via
+    Mongoose <code>.populate()</code> and stored as flat columns. This is the correct approach&mdash;ClickHouse
+    is optimized for scanning wide, flat tables and performs poorly on JOINs.
+</p>
+
+<div class="callout danger">
+    <div class="label">Problem</div>
+    The current sync implementation is excessively expensive on MongoDB, causes duplicate records in ClickHouse,
+    and has reliability issues with message acknowledgment. This spec proposes a refactoring to address all three.
+</div>
+
+<h3>Collections Synced</h3>
+<table>
+    <thead>
+        <tr>
+            <th>MongoDB Collection</th>
+            <th>ClickHouse Table</th>
+            <th>Completed Status Sync</th>
+            <th>Incomplete Status Sync</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>transaction</code></td>
+            <td><code>transaction</code></td>
+            <td>Change Stream + Cron (every 1 min)</td>
+            <td>N/A</td>
+        </tr>
+        <tr>
+            <td><code>proposalWithdrawal</code></td>
+            <td><code>proposalWithdrawal</code></td>
+            <td>Change Stream</td>
+            <td>Cron (every 10 min)</td>
+        </tr>
+        <tr>
+            <td><code>proposalMerchant</code></td>
+            <td><code>proposalMerchant</code></td>
+            <td>Change Stream</td>
+            <td>Cron (every 10 min)</td>
+        </tr>
+        <tr>
+            <td><code>proposalDeposit</code></td>
+            <td><code>proposalDeposit</code></td>
+            <td>Change Stream</td>
+            <td>Cron (every 10 min)</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 2. CURRENT ARCHITECTURE                                       -->
+<!-- ============================================================ -->
+<h2 id="s2"><span class="section-num">2.</span> Current Architecture</h2>
+
+<h3>2.1 Data Flow Overview</h3>
+
+<p>There are currently <strong>four overlapping paths</strong> that insert data into ClickHouse:</p>
+
+<div class="diagram"><span class="highlight">PATH 1: Change Stream &rarr; Pulsar &rarr; Consumer (Real-time, every 5s)</span>
+&boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdl;
+&boxv;                                                                                    &boxv;
+&boxv;  MongoDB Change Stream  <span class="bad">(fullDocument: 'updateLookup')</span>  &larr;&larr; <span class="bad">READ #1</span>              &boxv;
+&boxv;        &boxv;                                                                          &boxv;
+&boxv;        &boxv;  filter by status                                                        &boxv;
+&boxv;        &boxv;  dedup via in-memory Map (5 min window, lost on restart)                 &boxv;
+&boxv;        &darr;                                                                          &boxv;
+&boxv;  Send { _id, syncTableName } to Pulsar (60s delay)                                 &boxv;
+&boxv;        &boxv;                                                                          &boxv;
+&boxv;        &darr;                                                                          &boxv;
+&boxv;  Consumer (every 5s):                                                               &boxv;
+&boxv;    1. batchReceive() from Pulsar (up to 10,000 msgs)                                &boxv;
+&boxv;    2. <span class="bad">Acknowledge ALL messages BEFORE processing</span>                              &boxv;
+&boxv;    3. Group by syncTableName, deduplicate by _id                                    &boxv;
+&boxv;    4. <span class="bad">model.find({ _id: $in }).populate(7+ collections).lean()</span>  &larr;&larr; <span class="bad">READ #2</span>  &boxv;
+&boxv;    5. Map to ClickHouse format                                                      &boxv;
+&boxv;    6. fixDuplicateTimestamps() for transactions                                     &boxv;
+&boxv;    7. bulkInsert into ClickHouse                                                    &boxv;
+&boxv;                                                                                    &boxv;
+&boxur;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+
+<span class="highlight">PATH 2: Cron Scheduler &mdash; Transactions (every 1 minute)</span>
+  syncTransactions.js &rarr; getTransactionsAndSync()
+  <span class="bad">Queries MongoDB by time range + populate, up to 50,000 records</span>
+  <span class="bad">Overlaps with change stream for completed transactions</span>
+
+<span class="highlight">PATH 3: Cron Scheduler &mdash; Incomplete Proposals (every 10 minutes)</span>
+  syncProposalWithdrawal.js  &rarr; getIncompleteProposalWithdrawalAndSync()  (up to 50,000)
+  syncProposalMerchant.js    &rarr; getIncompleteProposalMerchantAndSync()    (up to 50,000)
+  syncProposalDeposit.js     &rarr; getIncompleteProposalDepositAndSync()     (up to 1,000)
+  <span class="warn">These are necessary &mdash; change stream does not catch CANCEL/EXPIRED/stale PENDING</span>
+
+<span class="highlight">PATH 4: Direct Pulsar Publish from Application Code</span>
+  transactionAction.js &rarr; createTransactions()
+  <span class="bad">Publishes { _id, syncTableName } directly to Pulsar after insertMany</span>
+  <span class="bad">Overlaps with change stream that fires on the same insert</span></div>
+
+<h3>2.2 Populate Chains (MongoDB Read Amplification)</h3>
+
+<p>Each <code>.populate()</code> call triggers additional MongoDB queries. Here is the cost per collection:</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Collection</th>
+            <th>Populate Depth</th>
+            <th>Collections Touched</th>
+            <th>Reads per Document</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>proposalWithdrawal</code></td>
+            <td>3 levels deep</td>
+            <td>bankCard &rarr; merchantGroup &rarr; merchantGateway, bankType, cardSupplier, platform &times;2, bankType, user &times;2</td>
+            <td><span class="tag tag-red">~8 reads</span></td>
+        </tr>
+        <tr>
+            <td><code>proposalMerchant</code></td>
+            <td>1 level</td>
+            <td>merchantGateway, merchantGroup, platform &times;2, playerRank</td>
+            <td><span class="tag tag-yellow">~5 reads</span></td>
+        </tr>
+        <tr>
+            <td><code>proposalDeposit</code></td>
+            <td>2 levels deep</td>
+            <td>cardSupplier, bankCard &rarr; bankType, platform &times;2, cardDeposit</td>
+            <td><span class="tag tag-yellow">~6 reads</span></td>
+        </tr>
+        <tr>
+            <td><code>transaction</code></td>
+            <td>1 level</td>
+            <td>user &times;2, platform, cardSupplier</td>
+            <td><span class="tag tag-green">~4 reads</span></td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="callout warning">
+    <div class="label">Key Insight</div>
+    For a batch of 1,000 withdrawal proposals, the consumer executes approximately <strong>8,000 MongoDB reads</strong>
+    (1 find query + 7 populate queries per document). The change stream already performed a read via
+    <code>fullDocument: 'updateLookup'</code>, making the total <strong>~9,000 reads for 1,000 documents</strong>.
+</div>
+
+<!-- ============================================================ -->
+<!-- 3. IDENTIFIED PROBLEMS                                        -->
+<!-- ============================================================ -->
+<h2 id="s3"><span class="section-num">3.</span> Identified Problems</h2>
+
+<!-- PROBLEM 1 -->
+<h3>3.1 Double-Read from MongoDB</h3>
+<p class="file-ref">
+    syncClickhousePlugin.js (line 178: <code>fullDocument: 'updateLookup'</code>)
+    &rarr; syncClickhousePluginConsumer.js (line 190: <code>.find().populate()</code>)
+</p>
+<p>
+    The change stream requests <code>fullDocument: 'updateLookup'</code>, which forces MongoDB to perform an
+    additional collection read on every update event to return the full document. However, only <code>_id</code>
+    and <code>syncTableName</code> are sent to Pulsar&mdash;the full document is discarded. The consumer then
+    re-reads the same document with a heavy <code>.populate()</code> chain.
+</p>
+<p><strong>Cost:</strong> Every document is read from MongoDB at least twice, with the second read amplified by 4-8x through populate.</p>
+
+<!-- PROBLEM 2 -->
+<h3>3.2 Redundant Transaction Cron Job</h3>
+<p class="file-ref">syncTransactions.js (every 1 minute, up to 50,000 records)</p>
+<p>
+    The <code>syncTransactions</code> cron runs every minute and queries MongoDB by time range with <code>.populate()</code>.
+    This is fully redundant with the change stream consumer, which already syncs completed transactions.
+    The completed-status cron jobs for withdrawal, merchant, and deposit are already commented out&mdash;but
+    the transaction one was not.
+</p>
+<p><strong>Cost:</strong> Up to 50,000 &times; 4 = 200,000 unnecessary MongoDB reads per minute.</p>
+
+<!-- PROBLEM 3 -->
+<h3>3.3 Duplicate Records in ClickHouse</h3>
+<p>Duplicates originate from four sources:</p>
+
+<table>
+    <thead>
+        <tr><th>Source</th><th>Mechanism</th><th>Why Dedup Fails</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Change stream + Cron overlap</td>
+            <td>Both insert the same completed proposal</td>
+            <td>No cross-system dedup; both insert independently</td>
+        </tr>
+        <tr>
+            <td>Change stream + Direct Pulsar publish</td>
+            <td><code>transactionAction.js</code> publishes to Pulsar on insert; change stream also fires on the same insert</td>
+            <td>In-memory dedup Map only covers the change stream process</td>
+        </tr>
+        <tr>
+            <td>Multiple change stream events per document</td>
+            <td>Status transitions (PENDING &rarr; PROCESSING &rarr; SUCCESS) each fire an event</td>
+            <td>5-min dedup window may expire between transitions; Map lost on PM2 restart</td>
+        </tr>
+        <tr>
+            <td>PM2 worker restart</td>
+            <td>In-memory <code>sentDocuments</code> Map is cleared</td>
+            <td>All previously tracked documents become "unsent"</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- PROBLEM 4 -->
+<h3>3.4 ReplacingMergeTree Dedup Defeated by Timestamp Manipulation</h3>
+<p class="file-ref">
+    syncProposals.js (line 304: <code>generateUniqueTimestamp</code>)
+    &rarr; syncClickhousePluginConsumer.js (line 221: <code>fixDuplicateTimestamps</code>)
+</p>
+<p>
+    ClickHouse's <code>ReplacingMergeTree</code> deduplicates rows with the same <code>ORDER BY</code> key
+    during background merges. If the <code>ORDER BY</code> key includes <code>completeTime</code>, and the
+    code manipulates milliseconds to make timestamps unique, then:
+</p>
+<ul>
+    <li>The same document inserted by the consumer and the cron job will have <strong>different generated timestamps</strong></li>
+    <li>ReplacingMergeTree sees them as <strong>different rows</strong> and keeps both</li>
+    <li>The <code>fixDuplicateTimestamps</code> function ensures uniqueness <em>within a batch</em> but creates divergence <em>across batches</em></li>
+</ul>
+
+<div class="callout danger">
+    <div class="label">Critical</div>
+    The timestamp manipulation actively <strong>prevents</strong> ClickHouse from deduplicating rows.
+    This is the root cause of persistent duplicates in report queries.
+</div>
+
+<!-- PROBLEM 5 -->
+<h3>3.5 Acknowledge-Before-Process Anti-Pattern</h3>
+<p class="file-ref">syncClickhousePluginConsumer.js (lines 91-96)</p>
+<p>
+    Messages are acknowledged <strong>immediately after receiving</strong>, before any processing occurs.
+    If processing fails (ClickHouse down, mapping error, etc.), the message is permanently lost from Pulsar.
+    The republishing mechanism that was meant to handle this is disabled
+    (<code>console.log('We removed the republishing')</code>).
+</p>
+<p><strong>Risk:</strong> Data loss on any processing failure.</p>
+
+<!-- ============================================================ -->
+<!-- 4. PROPOSED ARCHITECTURE                                      -->
+<!-- ============================================================ -->
+<h2 id="s4"><span class="section-num">4.</span> Proposed Architecture</h2>
+
+<h3>4.1 Design Principles</h3>
+<ol>
+    <li><strong>Read MongoDB once per document</strong> &mdash; eliminate the double-read</li>
+    <li><strong>Cache reference data</strong> &mdash; platform, bank, user names change rarely; don't query them per-document</li>
+    <li><strong>Use stable business keys for dedup</strong> &mdash; <code>proposalId</code> (or composite key for transactions), not timestamps</li>
+    <li><strong>Single source of truth per sync type</strong> &mdash; no overlapping paths for the same data</li>
+    <li><strong>Acknowledge after process</strong> &mdash; no data loss</li>
+</ol>
+
+<h3>4.2 New Data Flow</h3>
+
+<div class="diagram"><span class="good">PATH 1: Change Stream &rarr; Pulsar &rarr; Consumer (Completed Proposals)</span>
+&boxdr;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxdl;
+&boxv;                                                                                    &boxv;
+&boxv;  MongoDB Change Stream  <span class="good">(NO updateLookup)</span>                                       &boxv;
+&boxv;        &boxv;                                                                          &boxv;
+&boxv;        &boxv;  filter by operationType + updateDescription.updatedFields               &boxv;
+&boxv;        &darr;                                                                          &boxv;
+&boxv;  Send { _id, syncTableName } to Pulsar (60s delay)                                 &boxv;
+&boxv;        &boxv;                                                                          &boxv;
+&boxv;        &darr;                                                                          &boxv;
+&boxv;  Consumer (every 5s):                                                               &boxv;
+&boxv;    1. batchReceive() from Pulsar                                                    &boxv;
+&boxv;    2. Group by syncTableName, deduplicate by _id                                    &boxv;
+&boxv;    3. <span class="good">model.find({ _id: $in }).lean()</span>  &larr;&larr; <span class="good">SINGLE READ, no populate</span>             &boxv;
+&boxv;    4. <span class="good">Resolve references from in-memory cache</span>                                   &boxv;
+&boxv;    5. Map to ClickHouse format (no timestamp manipulation)                          &boxv;
+&boxv;    6. bulkInsert into ClickHouse                                                    &boxv;
+&boxv;    7. <span class="good">Acknowledge messages AFTER successful insert</span>                               &boxv;
+&boxv;       (negativeAcknowledge on failure &rarr; Pulsar auto-retries)                      &boxv;
+&boxv;                                                                                    &boxv;
+&boxur;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxh;&boxul;
+
+<span class="good">PATH 2: Cron Scheduler &mdash; Incomplete Proposals (every 10 minutes, KEEP)</span>
+  syncProposalWithdrawal.js  &rarr; CANCEL, EXPIRED, PENDING, PROCESSING, etc.
+  syncProposalMerchant.js    &rarr; PENDING, EXPIRED
+  syncProposalDeposit.js     &rarr; PROCESSING, VERIFIED, EXPIRED, CANCEL, CLAIMED
+  <span class="good">Modified: .find().lean() without populate, resolve from cache</span>
+
+<span class="good">PATH 3: Daily Safety-Net Audit (NEW, replaces transaction cron)</span>
+  Runs once per day, compares ClickHouse counts vs MongoDB counts
+  Re-syncs any gaps found in the last 48 hours
+
+<span class="bad">REMOVED: Direct Pulsar publish from transactionAction.js</span>
+  Change stream already catches the insert event &mdash; this was a duplicate source</div>
+
+<h3>4.3 Reference Data Cache</h3>
+
+<p>
+    Reference collections (platform, bankType, cardSupplier, merchantGateway, merchantGroup, user, playerRank)
+    are small (hundreds to low thousands of records) and change infrequently. Loading them into an in-memory
+    cache eliminates the populate overhead entirely.
+</p>
+
+<table>
+    <thead>
+        <tr><th>Collection</th><th>Estimated Size</th><th>Fields Needed</th><th>Cache TTL</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>platform</code></td>
+            <td>~10-50 records</td>
+            <td><code>platformId</code>, <code>name</code></td>
+            <td>10 min</td>
+        </tr>
+        <tr>
+            <td><code>bankType</code></td>
+            <td>~50-200 records</td>
+            <td><code>bankName</code></td>
+            <td>10 min</td>
+        </tr>
+        <tr>
+            <td><code>cardSupplier</code></td>
+            <td>~10-50 records</td>
+            <td><code>name</code></td>
+            <td>10 min</td>
+        </tr>
+        <tr>
+            <td><code>merchantGateway</code></td>
+            <td>~20-100 records</td>
+            <td><code>name</code>, <code>code</code></td>
+            <td>10 min</td>
+        </tr>
+        <tr>
+            <td><code>merchantGroup</code></td>
+            <td>~50-200 records</td>
+            <td><code>name</code>, <code>accountNumber</code>, <code>gateway</code></td>
+            <td>10 min</td>
+        </tr>
+        <tr>
+            <td><code>user</code></td>
+            <td>~100-500 records</td>
+            <td><code>username</code>, <code>name</code></td>
+            <td>10 min</td>
+        </tr>
+        <tr>
+            <td><code>playerRank</code></td>
+            <td>~10-50 records</td>
+            <td><code>nameEN</code></td>
+            <td>10 min</td>
+        </tr>
+        <tr>
+            <td><code>bankCard</code></td>
+            <td>Larger, variable</td>
+            <td><code>maskedCardNumber</code>, <code>accountType</code>, <code>holder</code>, <code>issueBank</code>, <code>merchantPayment</code></td>
+            <td>5 min (or on-demand)</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="callout">
+    <div class="label" style="color: var(--accent);">Design Note</div>
+    <code>bankCard</code> is the exception&mdash;it may be too large to cache entirely. For this collection,
+    use <strong>batch-fetch on demand</strong>: collect all unique <code>fromCard</code> IDs from the current batch,
+    fetch them in a single <code>.find({ _id: { $in: ids } })</code> query, and build a temporary lookup map.
+    This is still far cheaper than per-document populate.
+</div>
+
+<!-- ============================================================ -->
+<!-- 5. IMPLEMENTATION PLAN                                        -->
+<!-- ============================================================ -->
+<h2 id="s5"><span class="section-num">5.</span> Implementation Plan</h2>
+
+<!-- STEP 1 -->
+<div class="step-header">
+    <span class="step-badge">STEP 1</span>
+    <h3 style="margin:0">Create Reference Data Cache</h3>
+</div>
+<p><strong>Effort:</strong> <span class="tag tag-yellow">Medium</span> &nbsp; <strong>Risk:</strong> <span class="tag tag-green">Low</span></p>
+
+<p>Create a new utility module <code>server/src/helpers/referenceDataCache.js</code> that:</p>
+<ul>
+    <li>Loads all small reference collections into <code>Map&lt;ObjectId, Object&gt;</code> on initialization</li>
+    <li>Auto-refreshes every 10 minutes via <code>setInterval</code></li>
+    <li>Provides <code>get(collection, id)</code> with fallback to MongoDB on cache miss</li>
+    <li>Provides <code>batchGet(collection, ids[])</code> for bankCard-style on-demand fetch</li>
+    <li>Exposes <code>warmup()</code> for startup and <code>shutdown()</code> for graceful cleanup</li>
+</ul>
+
+<pre><code><span class="comment">// Pseudocode for referenceDataCache.js</span>
+
+<span class="keyword">const</span> caches = {
+    platform:        <span class="keyword">new</span> <span class="fn">Map</span>(),   <span class="comment">// _id → { platformId, name }</span>
+    bankType:        <span class="keyword">new</span> <span class="fn">Map</span>(),   <span class="comment">// _id → { bankName }</span>
+    cardSupplier:    <span class="keyword">new</span> <span class="fn">Map</span>(),   <span class="comment">// _id → { name }</span>
+    merchantGateway: <span class="keyword">new</span> <span class="fn">Map</span>(),   <span class="comment">// _id → { name, code }</span>
+    merchantGroup:   <span class="keyword">new</span> <span class="fn">Map</span>(),   <span class="comment">// _id → { name, accountNumber, gateway }</span>
+    user:            <span class="keyword">new</span> <span class="fn">Map</span>(),   <span class="comment">// _id → { username, name }</span>
+    playerRank:      <span class="keyword">new</span> <span class="fn">Map</span>(),   <span class="comment">// _id → { nameEN }</span>
+};
+
+<span class="keyword">async function</span> <span class="fn">refresh</span>() {
+    <span class="keyword">for</span> (<span class="keyword">const</span> [name, cache] <span class="keyword">of</span> Object.entries(caches)) {
+        <span class="keyword">const</span> docs = <span class="keyword">await</span> dbModels[name].<span class="fn">find</span>({}).<span class="fn">lean</span>();
+        cache.<span class="fn">clear</span>();
+        docs.<span class="fn">forEach</span>(doc =&gt; cache.<span class="fn">set</span>(doc._id.toString(), doc));
+    }
+}
+
+<span class="keyword">function</span> <span class="fn">get</span>(collection, id) {
+    <span class="keyword">return</span> caches[collection]?.<span class="fn">get</span>(id?.toString()) || <span class="keyword">null</span>;
+}
+
+<span class="keyword">async function</span> <span class="fn">batchGet</span>(collection, ids) {
+    <span class="keyword">const</span> missing = ids.<span class="fn">filter</span>(id =&gt; !caches[collection]?.<span class="fn">has</span>(id.toString()));
+    <span class="keyword">if</span> (missing.length > <span class="num">0</span>) {
+        <span class="keyword">const</span> docs = <span class="keyword">await</span> dbModels[collection].<span class="fn">find</span>({ _id: { $in: missing } }).<span class="fn">lean</span>();
+        docs.<span class="fn">forEach</span>(doc =&gt; caches[collection].<span class="fn">set</span>(doc._id.toString(), doc));
+    }
+    <span class="keyword">return new</span> <span class="fn">Map</span>(ids.<span class="fn">map</span>(id =&gt; [id.toString(), caches[collection].<span class="fn">get</span>(id.toString())]));
+}</code></pre>
+
+<!-- STEP 2 -->
+<div class="step-header">
+    <span class="step-badge">STEP 2</span>
+    <h3 style="margin:0">Rewrite Mapping Functions to Use Cache</h3>
+</div>
+<p><strong>Effort:</strong> <span class="tag tag-yellow">Medium</span> &nbsp; <strong>Risk:</strong> <span class="tag tag-yellow">Medium</span></p>
+
+<p>Modify the four mapping functions in <code>syncProposals.js</code> to accept a cache/lookup parameter
+instead of expecting pre-populated documents:</p>
+
+<div class="two-col">
+    <div class="col-box current">
+        <h4 style="color: var(--red);">Current (populated doc)</h4>
+<pre><code>record.platform?.name
+record.fromCard?.issueBank?.bankName
+record.creator?.username
+record.merchantGroup?.name</code></pre>
+    </div>
+    <div class="col-box proposed">
+        <h4 style="color: var(--green);">Proposed (cache lookup)</h4>
+<pre><code>cache.<span class="fn">get</span>(<span class="string">'platform'</span>, record.platform)?.name
+cache.<span class="fn">get</span>(<span class="string">'bankType'</span>, bankCard?.issueBank)?.bankName
+cache.<span class="fn">get</span>(<span class="string">'user'</span>, record.creator)?.username
+cache.<span class="fn">get</span>(<span class="string">'merchantGroup'</span>, record.merchantGroup)?.name</code></pre>
+    </div>
+</div>
+
+<p>
+    For <code>bankCard</code> (used by withdrawal and deposit), use <code>batchGet</code> at the batch level:
+    collect all unique <code>fromCard</code> / <code>bankCard</code> ObjectIds from the batch, fetch them once,
+    and pass the lookup map to each mapping call.
+</p>
+
+<!-- STEP 3 -->
+<div class="step-header">
+    <span class="step-badge">STEP 3</span>
+    <h3 style="margin:0">Remove <code>.populate()</code> from Consumer &amp; Cron Jobs</h3>
+</div>
+<p><strong>Effort:</strong> <span class="tag tag-green">Low</span> &nbsp; <strong>Risk:</strong> <span class="tag tag-green">Low</span></p>
+
+<p>In <code>syncClickhousePluginConsumer.js</code> (line 190-193):</p>
+<div class="two-col">
+    <div class="col-box current">
+        <h4 style="color: var(--red);">Current</h4>
+<pre><code><span class="keyword">const</span> populateOptions = <span class="fn">getPopulateOptions</span>(type);
+<span class="keyword">const</span> docs = <span class="keyword">await</span> model
+    .<span class="fn">find</span>({ _id: { $in: ids } })
+    .<span class="fn">populate</span>(populateOptions)
+    .<span class="fn">lean</span>();</code></pre>
+    </div>
+    <div class="col-box proposed">
+        <h4 style="color: var(--green);">Proposed</h4>
+<pre><code><span class="keyword">const</span> docs = <span class="keyword">await</span> model
+    .<span class="fn">find</span>({ _id: { $in: ids } })
+    .<span class="fn">lean</span>();
+<span class="comment">// References resolved via cache</span></code></pre>
+    </div>
+</div>
+
+<p>Same change in <code>genericProposalSync</code> (syncProposals.js line 423-427) for the cron jobs.</p>
+
+<!-- STEP 4 -->
+<div class="step-header">
+    <span class="step-badge">STEP 4</span>
+    <h3 style="margin:0">Remove <code>fullDocument: 'updateLookup'</code> from Change Stream</h3>
+</div>
+<p><strong>Effort:</strong> <span class="tag tag-green">Low</span> &nbsp; <strong>Risk:</strong> <span class="tag tag-green">Low</span></p>
+
+<p>In <code>syncClickhousePlugin.js</code> (line 176-178):</p>
+<div class="two-col">
+    <div class="col-box current">
+        <h4 style="color: var(--red);">Current</h4>
+<pre><code><span class="keyword">const</span> options = {
+    fullDocument: <span class="string">'updateLookup'</span>
+};</code></pre>
+        <p style="margin:0.5rem 0 0;font-size:0.85rem;">Forces MongoDB to re-read the full document on every update event.</p>
+    </div>
+    <div class="col-box proposed">
+        <h4 style="color: var(--green);">Proposed</h4>
+<pre><code><span class="keyword">const</span> options = {
+    fullDocument: <span class="string">'whenAvailable'</span>
+};</code></pre>
+        <p style="margin:0.5rem 0 0;font-size:0.85rem;">Returns full document only for inserts/replaces (already in oplog). For updates, use <code>updateDescription.updatedFields</code> for filtering.</p>
+    </div>
+</div>
+
+<p>
+    The change stream filter logic needs adjustment: for <code>update</code> operations, check
+    <code>change.updateDescription.updatedFields.status</code> directly instead of <code>change.fullDocument.status</code>.
+    For <code>insert</code> operations, the full document is already available in the oplog.
+</p>
+
+<!-- STEP 5 -->
+<div class="step-header">
+    <span class="step-badge">STEP 5</span>
+    <h3 style="margin:0">Fix Consumer Acknowledgment &amp; Remove Timestamp Hacks</h3>
+</div>
+<p><strong>Effort:</strong> <span class="tag tag-green">Low</span> &nbsp; <strong>Risk:</strong> <span class="tag tag-yellow">Medium</span></p>
+
+<h4>5a. Move acknowledgment to after processing</h4>
+<div class="two-col">
+    <div class="col-box current">
+        <h4 style="color: var(--red);">Current (ack before process)</h4>
+<pre><code><span class="comment">// Acknowledge ALL immediately</span>
+<span class="keyword">for</span> (<span class="keyword">const</span> msg <span class="keyword">of</span> messages) {
+    <span class="keyword">await</span> consumer.<span class="fn">acknowledge</span>(msg);
+}
+<span class="comment">// Then process...</span>
+<span class="keyword">await</span> <span class="fn">processBatch</span>(batch);</code></pre>
+    </div>
+    <div class="col-box proposed">
+        <h4 style="color: var(--green);">Proposed (ack after process)</h4>
+<pre><code><span class="keyword">try</span> {
+    <span class="keyword">await</span> <span class="fn">processBatch</span>(batch);
+    <span class="keyword">for</span> (<span class="keyword">const</span> msg <span class="keyword">of</span> batch) {
+        <span class="keyword">await</span> consumer.<span class="fn">acknowledge</span>(msg.msg);
+    }
+} <span class="keyword">catch</span> (err) {
+    <span class="keyword">for</span> (<span class="keyword">const</span> msg <span class="keyword">of</span> batch) {
+        <span class="keyword">await</span> consumer.<span class="fn">negativeAcknowledge</span>(msg.msg);
+    }
+}</code></pre>
+    </div>
+</div>
+
+<h4>5b. Remove <code>generateUniqueTimestamp</code> and <code>fixDuplicateTimestamps</code></h4>
+<p>
+    Once ClickHouse tables use stable business keys for dedup (see Section 6), there is no need to
+    manipulate timestamps. Remove:
+</p>
+<ul>
+    <li><code>generateUniqueTimestamp()</code> in <code>syncProposals.js</code></li>
+    <li><code>fixDuplicateTimestamps()</code> in <code>syncClickhousePluginConsumer.js</code></li>
+    <li>The while-loop that calls <code>fixDuplicateTimestamps</code> in <code>processBatch()</code></li>
+</ul>
+<p>Replace with plain timestamp formatting:</p>
+<pre><code>completeTime: record.completeTime
+    ? moment(record.completeTime).<span class="fn">format</span>(<span class="string">'YYYY-MM-DD HH:mm:ss.SSS'</span>)
+    : <span class="keyword">null</span></code></pre>
+
+<!-- STEP 6 -->
+<div class="step-header">
+    <span class="step-badge">STEP 6</span>
+    <h3 style="margin:0">Remove Redundant Sync Sources</h3>
+</div>
+<p><strong>Effort:</strong> <span class="tag tag-green">Low</span> &nbsp; <strong>Risk:</strong> <span class="tag tag-green">Low</span></p>
+
+<table>
+    <thead>
+        <tr><th>File</th><th>Action</th><th>Reason</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>syncTransactions.js</code></td>
+            <td><span class="tag tag-red">Disable</span> (comment out like the others)</td>
+            <td>Change stream already syncs completed transactions. Replace with daily audit.</td>
+        </tr>
+        <tr>
+            <td><code>transactionAction.js</code> (line 176)</td>
+            <td><span class="tag tag-red">Remove</span> Pulsar publish</td>
+            <td>Change stream fires on the same insert event. This is a duplicate source.</td>
+        </tr>
+        <tr>
+            <td><code>syncProposalWithdrawal.js</code></td>
+            <td><span class="tag tag-green">Keep</span> (incomplete only)</td>
+            <td>Necessary for CANCEL, EXPIRED, stale PENDING proposals.</td>
+        </tr>
+        <tr>
+            <td><code>syncProposalMerchant.js</code></td>
+            <td><span class="tag tag-green">Keep</span> (incomplete only)</td>
+            <td>Necessary for PENDING, EXPIRED proposals.</td>
+        </tr>
+        <tr>
+            <td><code>syncProposalDeposit.js</code></td>
+            <td><span class="tag tag-green">Keep</span> (incomplete only)</td>
+            <td>Necessary for PROCESSING, VERIFIED, EXPIRED, CANCEL, CLAIMED proposals.</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 6. CLICKHOUSE SCHEMA CHANGES                                  -->
+<!-- ============================================================ -->
+<h2 id="s6"><span class="section-num">6.</span> ClickHouse Schema Changes</h2>
+
+<div class="callout warning">
+    <div class="label">Important</div>
+    This is the most critical change. Without fixing the <code>ORDER BY</code> key, duplicates will persist
+    regardless of other optimizations. This requires <strong>table recreation</strong> (ClickHouse does not support
+    altering the ORDER BY key of an existing table).
+</div>
+
+<h3>6.1 Migration Strategy</h3>
+<ol>
+    <li>Create new tables with correct schema (e.g., <code>transaction_v2</code>)</li>
+    <li>Backfill from old tables: <code>INSERT INTO transaction_v2 SELECT ... FROM transaction FINAL</code></li>
+    <li>Switch application to write to new tables</li>
+    <li>Verify data integrity</li>
+    <li>Rename: drop old table, rename new table</li>
+</ol>
+
+<h3>6.2 Dedup Key Design</h3>
+
+<div class="callout warning">
+    <div class="label">Transaction: Composite Key Required</div>
+    <p style="margin-bottom:0.5rem;">
+        A single proposal can generate <strong>multiple transaction records</strong> with different
+        <code>transactionType</code> values. For example, proposal <code>10000</code> may produce:
+    </p>
+    <table style="margin:0.75rem 0 0.5rem;">
+        <thead><tr><th>proposalId</th><th>transactionType</th><th>amount</th></tr></thead>
+        <tbody>
+            <tr><td><code>10000</code></td><td><code>Payment</code></td><td>500.00</td></tr>
+            <tr><td><code>10000</code></td><td><code>Payment Fee</code></td><td>5.00</td></tr>
+        </tbody>
+    </table>
+    <p style="margin:0;">
+        Using <code>proposalId</code> alone as the <code>ORDER BY</code> key would cause ReplacingMergeTree
+        to <strong>merge these into a single row</strong>, losing the fee record. The transaction table
+        <strong>must</strong> use the composite key <code>(proposalId, transactionType)</code>.
+    </p>
+</div>
+
+<p>The other three tables (withdrawal, merchant, deposit) have a 1:1 relationship between
+<code>proposalId</code> and the record, so <code>proposalId</code> alone is sufficient.</p>
+
+<table>
+    <thead>
+        <tr><th>ClickHouse Table</th><th>ORDER BY (Dedup Key)</th><th>Reason</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>transaction</code></td>
+            <td><code>(proposalId, transactionType)</code></td>
+            <td>Same proposal has multiple types (Payment, Payment Fee, etc.)</td>
+        </tr>
+        <tr>
+            <td><code>proposalWithdrawal</code></td>
+            <td><code>(proposalID)</code></td>
+            <td>1:1 &mdash; one record per proposal</td>
+        </tr>
+        <tr>
+            <td><code>proposalMerchant</code></td>
+            <td><code>(proposalId)</code></td>
+            <td>1:1 &mdash; one record per proposal</td>
+        </tr>
+        <tr>
+            <td><code>proposalDeposit</code></td>
+            <td><code>(proposalId)</code></td>
+            <td>1:1 &mdash; one record per proposal</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>6.3 Proposed Table Schemas</h3>
+
+<h4>transaction</h4>
+<pre><code><span class="keyword">CREATE TABLE</span> transaction_v2 (
+    <span class="comment">-- ... all existing columns ...</span>
+    proposalId     <span class="fn">String</span>,
+    transactionType <span class="fn">String</span>,
+    completeTime   <span class="fn">Nullable</span>(<span class="fn">DateTime64</span>(<span class="num">3</span>)),
+    createdAt      <span class="fn">DateTime64</span>(<span class="num">3</span>),
+    _version       <span class="fn">UInt64</span> <span class="keyword">DEFAULT</span> <span class="fn">toUnixTimestamp64Milli</span>(<span class="fn">now64</span>(<span class="num">3</span>))
+) <span class="keyword">ENGINE</span> = <span class="fn">ReplacingMergeTree</span>(_version)
+<span class="keyword">PARTITION BY</span> <span class="fn">toYYYYMM</span>(createdAt)
+<span class="keyword">ORDER BY</span> (proposalId, transactionType)  <span class="comment">-- composite key: same proposal, different types</span>
+<span class="keyword">SETTINGS</span> index_granularity = <span class="num">8192</span>;</code></pre>
+
+<h4>proposalWithdrawal</h4>
+<pre><code><span class="keyword">CREATE TABLE</span> proposalWithdrawal_v2 (
+    <span class="comment">-- ... all existing columns ...</span>
+    proposalID     <span class="fn">String</span>,
+    createdAt      <span class="fn">DateTime64</span>(<span class="num">3</span>),
+    _version       <span class="fn">UInt64</span> <span class="keyword">DEFAULT</span> <span class="fn">toUnixTimestamp64Milli</span>(<span class="fn">now64</span>(<span class="num">3</span>))
+) <span class="keyword">ENGINE</span> = <span class="fn">ReplacingMergeTree</span>(_version)
+<span class="keyword">PARTITION BY</span> <span class="fn">toYYYYMM</span>(createdAt)
+<span class="keyword">ORDER BY</span> (proposalID)  <span class="comment">-- single key: 1:1 with record</span>
+<span class="keyword">SETTINGS</span> index_granularity = <span class="num">8192</span>;</code></pre>
+
+<h4>proposalMerchant</h4>
+<pre><code><span class="keyword">CREATE TABLE</span> proposalMerchant_v2 (
+    <span class="comment">-- ... all existing columns ...</span>
+    proposalId     <span class="fn">String</span>,
+    createdAt      <span class="fn">DateTime64</span>(<span class="num">3</span>),
+    _version       <span class="fn">UInt64</span> <span class="keyword">DEFAULT</span> <span class="fn">toUnixTimestamp64Milli</span>(<span class="fn">now64</span>(<span class="num">3</span>))
+) <span class="keyword">ENGINE</span> = <span class="fn">ReplacingMergeTree</span>(_version)
+<span class="keyword">PARTITION BY</span> <span class="fn">toYYYYMM</span>(createdAt)
+<span class="keyword">ORDER BY</span> (proposalId)  <span class="comment">-- single key: 1:1 with record</span>
+<span class="keyword">SETTINGS</span> index_granularity = <span class="num">8192</span>;</code></pre>
+
+<h4>proposalDeposit</h4>
+<pre><code><span class="keyword">CREATE TABLE</span> proposalDeposit_v2 (
+    <span class="comment">-- ... all existing columns ...</span>
+    proposalId     <span class="fn">String</span>,
+    createdAt      <span class="fn">DateTime64</span>(<span class="num">3</span>),
+    _version       <span class="fn">UInt64</span> <span class="keyword">DEFAULT</span> <span class="fn">toUnixTimestamp64Milli</span>(<span class="fn">now64</span>(<span class="num">3</span>))
+) <span class="keyword">ENGINE</span> = <span class="fn">ReplacingMergeTree</span>(_version)
+<span class="keyword">PARTITION BY</span> <span class="fn">toYYYYMM</span>(createdAt)
+<span class="keyword">ORDER BY</span> (proposalId)  <span class="comment">-- single key: 1:1 with record</span>
+<span class="keyword">SETTINGS</span> index_granularity = <span class="num">8192</span>;</code></pre>
+
+<h3>6.4 Query Changes</h3>
+<p>
+    All report queries that read from these tables should use <code>FINAL</code> to ensure deduplication
+    at query time, or use a subquery pattern:
+</p>
+<pre><code><span class="comment">-- Option A: FINAL keyword (simpler, slightly slower on large scans)</span>
+<span class="keyword">SELECT</span> * <span class="keyword">FROM</span> transaction <span class="keyword">FINAL</span>
+<span class="keyword">WHERE</span> createdAt <span class="keyword">BETWEEN</span> <span class="string">'2026-01-01'</span> <span class="keyword">AND</span> <span class="string">'2026-01-31'</span>;
+
+<span class="comment">-- Option B: argMax subquery (better for large scans)</span>
+<span class="keyword">SELECT</span> <span class="fn">argMax</span>(t, _version) <span class="keyword">AS</span> latest
+<span class="keyword">FROM</span> transaction t
+<span class="keyword">WHERE</span> createdAt <span class="keyword">BETWEEN</span> <span class="string">'2026-01-01'</span> <span class="keyword">AND</span> <span class="string">'2026-01-31'</span>
+<span class="keyword">GROUP BY</span> proposalId, transactionType;</code></pre>
+
+<!-- ============================================================ -->
+<!-- 7. EXPECTED IMPACT                                            -->
+<!-- ============================================================ -->
+<h2 id="s7"><span class="section-num">7.</span> Expected Impact</h2>
+
+<div class="impact-grid">
+    <div class="impact-card">
+        <div class="number">~80%</div>
+        <div class="label">MongoDB Read Reduction</div>
+    </div>
+    <div class="impact-card">
+        <div class="number">~0</div>
+        <div class="label">Duplicate Rows (with FINAL)</div>
+    </div>
+    <div class="impact-card">
+        <div class="number">0</div>
+        <div class="label">Data Loss on Failure</div>
+    </div>
+</div>
+
+<table>
+    <thead>
+        <tr><th>Metric</th><th>Current</th><th>After Optimization</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>MongoDB reads per proposal (consumer)</td>
+            <td><span class="tag tag-red">~8-9 reads</span> (updateLookup + find + populate)</td>
+            <td><span class="tag tag-green">~1 read</span> (find only, refs from cache)</td>
+        </tr>
+        <tr>
+            <td>Transaction cron MongoDB load</td>
+            <td><span class="tag tag-red">Every 1 min</span>, up to 50K &times; 4 reads</td>
+            <td><span class="tag tag-green">Disabled</span> (daily audit only)</td>
+        </tr>
+        <tr>
+            <td>Incomplete proposal cron MongoDB load</td>
+            <td><span class="tag tag-yellow">Every 10 min</span>, with populate</td>
+            <td><span class="tag tag-green">Every 10 min</span>, without populate (cache)</td>
+        </tr>
+        <tr>
+            <td>Duplicate rows in ClickHouse</td>
+            <td><span class="tag tag-red">Frequent</span> (timestamp dedup fails)</td>
+            <td><span class="tag tag-green">Zero</span> (business key dedup + FINAL)</td>
+        </tr>
+        <tr>
+            <td>Data loss on consumer failure</td>
+            <td><span class="tag tag-red">Possible</span> (ack before process, republish disabled)</td>
+            <td><span class="tag tag-green">None</span> (ack after process, Pulsar retries)</td>
+        </tr>
+        <tr>
+            <td>Change stream MongoDB overhead</td>
+            <td><span class="tag tag-yellow">updateLookup</span> (extra read per update)</td>
+            <td><span class="tag tag-green">whenAvailable</span> (no extra read)</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 8. RISKS & MITIGATIONS                                        -->
+<!-- ============================================================ -->
+<h2 id="s8"><span class="section-num">8.</span> Risks &amp; Mitigations</h2>
+
+<table>
+    <thead>
+        <tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Reference cache returns stale data (e.g., platform name changed)</td>
+            <td><span class="tag tag-yellow">Low</span></td>
+            <td>10-min TTL limits staleness. Reference data changes are rare and non-critical for reports (name changes are cosmetic). Cache can be manually flushed if needed.</td>
+        </tr>
+        <tr>
+            <td>bankCard collection too large to cache</td>
+            <td><span class="tag tag-yellow">Medium</span></td>
+            <td>Use batch-fetch on demand (per consumer batch), not full cache. Still far cheaper than per-document populate.</td>
+        </tr>
+        <tr>
+            <td>ClickHouse table migration causes downtime</td>
+            <td><span class="tag tag-yellow">Medium</span></td>
+            <td>Use side-by-side migration: create <code>_v2</code> tables, backfill, switch, verify, then rename. No downtime required.</td>
+        </tr>
+        <tr>
+            <td>Removing transaction cron causes gaps if change stream misses events</td>
+            <td><span class="tag tag-yellow">Medium</span></td>
+            <td>Daily audit job compares counts and re-syncs gaps. Change stream resume tokens in Redis provide recovery on restart.</td>
+        </tr>
+        <tr>
+            <td>Ack-after-process causes reprocessing on consumer crash</td>
+            <td><span class="tag tag-green">Low</span></td>
+            <td>ClickHouse ReplacingMergeTree handles idempotent inserts. Reprocessing the same batch produces the same result.</td>
+        </tr>
+        <tr>
+            <td>Mapping function changes break existing report queries</td>
+            <td><span class="tag tag-yellow">Medium</span></td>
+            <td>Output columns and values remain identical. Only the internal resolution method changes (cache vs populate). Verify with diff of sample mapped output.</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================================================ -->
+<!-- 9. ROLLOUT STRATEGY                                           -->
+<!-- ============================================================ -->
+<h2 id="s9"><span class="section-num">9.</span> Rollout Strategy</h2>
+
+<h3>Phase 1: Low-Risk Quick Wins</h3>
+<p><span class="tag tag-green">1-2 days</span></p>
+<ol>
+    <li>Disable <code>syncTransactions.js</code> cron (comment out like the other completed-status crons)</li>
+    <li>Remove direct Pulsar publish from <code>transactionAction.js</code></li>
+    <li>Remove <code>fullDocument: 'updateLookup'</code> from change stream options</li>
+    <li>Fix change stream filter to use <code>updateDescription.updatedFields</code> for update events</li>
+</ol>
+
+<h3>Phase 2: Consumer Reliability Fix</h3>
+<p><span class="tag tag-yellow">1-2 days</span></p>
+<ol>
+    <li>Move message acknowledgment to after successful processing</li>
+    <li>Add <code>negativeAcknowledge</code> on failure (Pulsar will auto-retry)</li>
+    <li>Remove the disabled republishing code</li>
+</ol>
+
+<h3>Phase 3: Reference Cache + Remove Populate</h3>
+<p><span class="tag tag-yellow">3-5 days</span></p>
+<ol>
+    <li>Implement <code>referenceDataCache.js</code></li>
+    <li>Rewrite mapping functions to use cache</li>
+    <li>Remove <code>.populate()</code> from consumer and cron jobs</li>
+    <li>Validate: compare mapped output (old vs new) for a sample batch</li>
+</ol>
+
+<h3>Phase 4: ClickHouse Schema Migration</h3>
+<p><span class="tag tag-red">2-3 days</span></p>
+<ol>
+    <li>Create <code>_v2</code> tables with correct <code>ORDER BY</code> keys</li>
+    <li>Backfill from existing tables using <code>INSERT INTO ... SELECT ... FROM ... FINAL</code></li>
+    <li>Switch application writes to <code>_v2</code> tables</li>
+    <li>Update report queries to use <code>FINAL</code> or <code>argMax</code> pattern</li>
+    <li>Remove <code>generateUniqueTimestamp</code> and <code>fixDuplicateTimestamps</code></li>
+    <li>Verify data integrity, rename tables</li>
+</ol>
+
+<h3>Phase 5: Daily Audit Job</h3>
+<p><span class="tag tag-green">1 day</span></p>
+<ol>
+    <li>Create daily job that compares record counts between MongoDB and ClickHouse for the last 48 hours</li>
+    <li>Auto-resync any gaps found</li>
+</ol>
+
+<!-- ============================================================ -->
+<!-- 10. FILE INVENTORY                                            -->
+<!-- ============================================================ -->
+<h2 id="s10"><span class="section-num">10.</span> File Inventory</h2>
+
+<table>
+    <thead>
+        <tr><th>File</th><th>Change Type</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>helpers/referenceDataCache.js</code></td>
+            <td><span class="tag tag-blue">NEW</span></td>
+            <td>In-memory cache for reference collections</td>
+        </tr>
+        <tr>
+            <td><code>helpers/syncClickhousePlugin.js</code></td>
+            <td><span class="tag tag-yellow">MODIFY</span></td>
+            <td>Remove <code>updateLookup</code>, update filter logic for update events</td>
+        </tr>
+        <tr>
+            <td><code>scheduler/clickHouse/syncClickhousePluginConsumer.js</code></td>
+            <td><span class="tag tag-yellow">MODIFY</span></td>
+            <td>Remove populate, use cache, fix ack order, remove timestamp hacks</td>
+        </tr>
+        <tr>
+            <td><code>components/clickHouse/action/syncProposals.js</code></td>
+            <td><span class="tag tag-yellow">MODIFY</span></td>
+            <td>Rewrite mapping functions to use cache, remove <code>generateUniqueTimestamp</code>, remove populate from <code>genericProposalSync</code></td>
+        </tr>
+        <tr>
+            <td><code>scheduler/clickHouse/syncTransactions.js</code></td>
+            <td><span class="tag tag-red">DISABLE</span></td>
+            <td>Comment out cron (redundant with change stream)</td>
+        </tr>
+        <tr>
+            <td><code>components/transaction/transactionAction.js</code></td>
+            <td><span class="tag tag-yellow">MODIFY</span></td>
+            <td>Remove direct Pulsar publish (lines 167-177)</td>
+        </tr>
+        <tr>
+            <td><code>scheduler/clickHouse/syncProposalWithdrawal.js</code></td>
+            <td><span class="tag tag-green">KEEP</span></td>
+            <td>No change (incomplete status sync is necessary)</td>
+        </tr>
+        <tr>
+            <td><code>scheduler/clickHouse/syncProposalMerchant.js</code></td>
+            <td><span class="tag tag-green">KEEP</span></td>
+            <td>No change (incomplete status sync is necessary)</td>
+        </tr>
+        <tr>
+            <td><code>scheduler/clickHouse/syncProposalDeposit.js</code></td>
+            <td><span class="tag tag-green">KEEP</span></td>
+            <td>No change (incomplete status sync is necessary)</td>
+        </tr>
+        <tr>
+            <td><code>ClickHouse DDL</code></td>
+            <td><span class="tag tag-red">RECREATE</span></td>
+            <td>All 4 tables: change ORDER BY to business key (composite key for transaction), add _version column</td>
+        </tr>
+        <tr>
+            <td><code>Report queries</code></td>
+            <td><span class="tag tag-yellow">MODIFY</span></td>
+            <td>Add FINAL keyword or argMax pattern to all SELECT queries</td>
+        </tr>
+    </tbody>
+</table>
+
+<br><br>
+<div style="text-align:center; color: var(--text-muted); font-size: 0.85rem; padding: 2rem 0; border-top: 1px solid var(--surface-2);">
+    End of Technical Specification &mdash; PMS 2.0 ClickHouse Sync Optimization
+</div>
+
+</div>
+</body>
+</html>
