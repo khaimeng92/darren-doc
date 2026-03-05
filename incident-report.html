@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>故障报告 2026-03</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:ital,wght@0,600;0,700;1,600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  /* Slate palette — dark but warm */
+  --s900:#1e2330;
+  --s800:#252b3a;
+  --s700:#2d3447;
+  --s600:#374057;
+  --s500:#4a5470;
+  --s400:#6b7591;
+  --s300:#959eb5;
+  --s200:#c2c8d8;
+  --s100:#e8eaf0;
+  --s050:#f2f4f8;
+
+  --bg:    var(--s800);
+  --card:  var(--s700);
+  --panel: var(--s600);
+  --edge:  rgba(255,255,255,0.07);
+  --edge2: rgba(255,255,255,0.13);
+
+  --text:  #dde1ec;
+  --dim:   var(--s300);
+  --faint: var(--s500);
+
+  --red:    #e8604c;
+  --red2:   rgba(232,96,76,0.15);
+  --red3:   rgba(232,96,76,0.30);
+  --amber:  #e8a94c;
+  --amber2: rgba(232,169,76,0.15);
+  --amber3: rgba(232,169,76,0.30);
+  --green:  #4ecb8d;
+  --green2: rgba(78,203,141,0.13);
+  --green3: rgba(78,203,141,0.28);
+  --blue:   #6ba4f8;
+
+  --f-serif:'IBM Plex Serif',serif;
+  --f-sans:'IBM Plex Sans','Noto Sans SC',sans-serif;
+  --f-mono:'IBM Plex Mono',monospace;
+}
+
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--f-sans);
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* subtle grain */
+body::after{
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:9999;opacity:.5;
+}
+
+.wrap{max-width:1000px;margin:0 auto;padding:0 44px 96px}
+
+/* ─── HEADER ─── */
+header{
+  padding:60px 0 44px;
+  border-bottom:1px solid var(--edge2);
+  margin-bottom:60px;
+  animation:rise .7s ease both;
+}
+.hd-top{display:flex;justify-content:space-between;align-items:flex-start;gap:40px}
+.hd-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--dim);
+  border:1px solid var(--edge2);padding:5px 14px;border-radius:2px;
+  margin-bottom:22px;
+}
+.hd-blink{width:7px;height:7px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 0 3px var(--green2);animation:pulse 2.5s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px var(--green2)}50%{box-shadow:0 0 0 6px rgba(78,203,141,0)}}
+
+h1{
+  font-family:var(--f-serif);
+  font-size:clamp(40px,5.5vw,64px);
+  font-weight:700;line-height:1.02;letter-spacing:-.025em;
+  color:#fff;
+}
+h1 span{color:var(--red)}
+
+.hd-meta{
+  flex-shrink:0;padding-top:6px;
+  display:flex;flex-direction:column;gap:6px;align-items:flex-end;
+}
+.hd-meta-row{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.05em;
+  color:var(--dim);text-align:right;
+}
+.hd-meta-row b{color:var(--text);font-weight:500;display:block;font-size:11px}
+.hd-safe{color:var(--green)!important;font-weight:600!important}
+
+.hd-bar{
+  margin-top:32px;height:2px;
+  background:linear-gradient(90deg,var(--red) 0%,var(--amber) 50%,transparent 100%);
+}
+
+/* ─── SECTION HEADER ─── */
+.sh{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.sh-txt{font-family:var(--f-mono);font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.sh-rule{flex:1;height:1px;background:var(--edge)}
+
+/* ─── OVERVIEW CARDS ─── */
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:60px;animation:rise .6s .08s ease both}
+.oc{
+  background:var(--card);padding:30px 26px;
+  position:relative;overflow:hidden;
+}
+.oc::before{content:'';position:absolute;inset:0;top:auto;height:2px}
+.oc.r::before{background:linear-gradient(90deg,var(--red),transparent)}
+.oc.a::before{background:linear-gradient(90deg,var(--amber),transparent)}
+/* ghost number */
+.oc-ghost{
+  position:absolute;right:-6px;bottom:-18px;
+  font-family:var(--f-serif);font-size:140px;font-weight:700;line-height:1;
+  color:rgba(255,255,255,.03);pointer-events:none;user-select:none;
+}
+.oc-tag{font-family:var(--f-mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;margin-bottom:13px}
+.oc.r .oc-tag{color:var(--red)}
+.oc.a .oc-tag{color:var(--amber)}
+.oc h3{font-family:var(--f-serif);font-size:20px;font-weight:600;line-height:1.35;color:#fff;margin-bottom:11px;letter-spacing:-.01em}
+.oc-dur{font-family:var(--f-mono);font-size:11px;color:var(--dim);padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--edge)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:10px;font-weight:500;padding:3px 11px;border-radius:2px;border:1px solid;letter-spacing:.03em}
+.chip-r{background:var(--red2);color:var(--red);border-color:var(--red3)}
+.chip-a{background:var(--amber2);color:var(--amber);border-color:var(--amber3)}
+.chip-g{background:var(--green2);color:var(--green);border-color:var(--green3)}
+
+/* ─── SVG TIMELINE ─── */
+.tl-section{margin-bottom:60px;animation:rise .6s .16s ease both}
+.tl-wrap{
+  background:var(--card);border:1px solid var(--edge);
+  padding:36px 36px 28px;overflow-x:auto;
+}
+
+.tl-svg-container{min-width:680px}
+
+/* Legend */
+.tl-legend{display:flex;gap:22px;margin-bottom:30px;flex-wrap:wrap}
+.tl-li{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:10px;color:var(--dim);letter-spacing:.05em}
+.tl-li-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* SVG itself */
+.tl-svg{width:100%;display:block;overflow:visible}
+
+/* Annotations below SVG */
+.tl-ann{margin-top:24px;display:flex;flex-direction:column;gap:6px}
+.tl-ann-item{
+  display:flex;align-items:flex-start;gap:11px;
+  background:var(--s900);padding:11px 15px;border-radius:2px;
+  border-left:2px solid transparent;
+}
+.tl-ann-item.r{border-left-color:var(--red)}
+.tl-ann-item.a{border-left-color:var(--amber)}
+.tl-ann-item.g{border-left-color:var(--green)}
+.tl-ann-time{font-family:var(--f-mono);font-size:10px;color:var(--dim);white-space:nowrap;padding-top:1px;flex-shrink:0;min-width:110px}
+.tl-ann-text{font-size:12.5px;color:var(--dim);line-height:1.7}
+.tl-ann-text strong{color:var(--text);font-weight:600}
+
+/* ─── ROOT CAUSE ─── */
+.rc-section{margin-bottom:60px;animation:rise .6s .24s ease both}
+.rc-box{background:var(--card);border:1px solid var(--edge);padding:36px}
+.rc-sub{font-family:var(--f-mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-bottom:28px}
+.rc-flow{display:flex;align-items:stretch;gap:0;margin-bottom:6px}
+.rcf{flex:1;text-align:center;padding:14px 10px;font-size:12.5px;line-height:1.5;font-weight:500;border:1px solid var(--edge)}
+.rcf small{display:block;font-size:10px;color:var(--dim);margin-top:3px;font-weight:400}
+.rcf.t1{border-color:var(--red3);background:var(--red2);color:var(--text)}
+.rcf.t2{border-color:var(--red);background:var(--red);color:#fff}
+.rcf.t2 small{color:rgba(255,255,255,.65)}
+.rcf.t3{border-color:var(--amber3);background:var(--amber2);color:var(--text)}
+.rcf.t4{border-color:var(--amber);background:var(--amber);color:var(--s900)}
+.rcf.t4 small{color:rgba(30,35,48,.7)}
+.rca{width:26px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:13px}
+.rc-loop{font-family:var(--f-mono);font-size:10px;color:var(--red);text-align:center;letter-spacing:.08em;padding:9px 0;opacity:.7}
+.rc-outcome{
+  background:var(--s900);border-left:3px solid var(--amber);
+  padding:14px 18px;font-size:13px;color:var(--dim);line-height:1.75;margin-top:4px;
+}
+.rc-outcome strong{color:var(--text)}
+.rc-root{margin-top:28px;padding-top:28px;border-top:1px solid var(--edge)}
+.rc-root-lbl{font-family:var(--f-mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-bottom:12px}
+.rc-root-txt{
+  font-family:var(--f-serif);font-style:italic;
+  font-size:20px;font-weight:600;color:#fff;line-height:1.6;
+  border-left:3px solid var(--red);padding-left:20px;
+}
+
+/* ─── STATUS ─── */
+.st-section{margin-bottom:60px;animation:rise .6s .32s ease both}
+.st-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.stc{background:var(--card);padding:22px 20px;transition:background .2s}
+.stc:hover{background:var(--panel)}
+.stc-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--f-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  padding:3px 10px;border-radius:2px;margin-bottom:13px;border:1px solid;
+}
+.stc-badge::before{content:'';width:5px;height:5px;border-radius:50%}
+.stc-badge.done{color:var(--green);background:var(--green2);border-color:var(--green3)}
+.stc-badge.done::before{background:var(--green)}
+.stc-badge.going{color:var(--amber);background:var(--amber2);border-color:var(--amber3)}
+.stc-badge.going::before{background:var(--amber);animation:blink 1.4s infinite}
+.stc-badge.plan{color:var(--blue);background:rgba(107,164,248,.1);border-color:rgba(107,164,248,.25)}
+.stc-badge.plan::before{background:var(--blue)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.stc h4{font-size:13px;font-weight:600;color:#fff;margin-bottom:7px;line-height:1.4}
+.stc p{font-size:12px;color:var(--dim);line-height:1.7}
+
+/* ─── ASSURANCE ─── */
+.as-section{margin-bottom:60px;animation:rise .6s .4s ease both}
+.as-box{
+  background:var(--green2);border:1px solid var(--green3);border-left:3px solid var(--green);
+  padding:28px 32px;display:flex;gap:20px;align-items:flex-start;
+}
+.as-icon{font-size:28px;flex-shrink:0;margin-top:2px;filter:drop-shadow(0 0 8px var(--green3))}
+.as-h{font-size:14px;font-weight:600;color:#fff;margin-bottom:8px}
+.as-p{font-size:13px;color:var(--dim);line-height:1.8}
+
+/* ─── FOOTER ─── */
+footer{border-top:1px solid var(--edge);padding:22px 0;display:flex;justify-content:space-between}
+footer span{font-family:var(--f-mono);font-size:10px;color:var(--faint);letter-spacing:.1em}
+
+@keyframes rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:720px){
+  .wrap{padding:0 20px 80px}
+  .cards{grid-template-columns:1fr}
+  .st-grid{grid-template-columns:1fr 1fr}
+  .hd-top{flex-direction:column}
+  .hd-meta{align-items:flex-start}
+  .hd-meta-row{text-align:left}
+  .rc-flow{flex-wrap:wrap}
+}
+@media(max-width:480px){.st-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="hd-top">
+    <div>
+      <div class="hd-eyebrow"><span class="hd-blink"></span>PMS2.0_PH · 内部技术通报</div>
+      <h1>系统故障<br><span>报告</span><br>2026 年 3 月</h1>
+    </div>
+    <div class="hd-meta">
+      <div class="hd-meta-row">报告时间<b>2026-03-04 &nbsp;22:54 +08:00</b></div>
+      <div class="hd-meta-row">报告团队<b>Engineering Team</b></div>
+      <div class="hd-meta-row">故障数量<b>2 起</b></div>
+      <div class="hd-meta-row">资金影响<b class="hd-safe">✓ 无</b></div>
+    </div>
+  </div>
+  <div class="hd-bar"></div>
+</header>
+
+<!-- ══ OVERVIEW CARDS ══ -->
+<div class="sh"><span class="sh-txt">两起故障概览</span><div class="sh-rule"></div></div>
+<div class="cards">
+  <div class="oc r">
+    <div class="oc-ghost">01</div>
+    <div class="oc-tag">故障 01</div>
+    <h3>ClickHouse 数据<br>分析管道崩溃</h3>
+    <div class="oc-dur">03-02 &nbsp;12:26 &nbsp;→&nbsp; 03-03 全天 &nbsp;·&nbsp; 约 36 小时</div>
+    <div class="chips">
+      <span class="chip chip-r">分析数据失真</span>
+      <span class="chip chip-g">资金未受影响</span>
+    </div>
+  </div>
+  <div class="oc a">
+    <div class="oc-ghost">02</div>
+    <div class="oc-tag">故障 02</div>
+    <h3>商户余额<br>显示值异常偏高</h3>
+    <div class="oc-dur">03-04 &nbsp;16:00 &nbsp;→&nbsp; 20:02 &nbsp;·&nbsp; 约 4 小时</div>
+    <div class="chips">
+      <span class="chip chip-a">余额显示虚增</span>
+      <span class="chip chip-g">实际资金安全</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ VISUAL TIMELINE ══ -->
+<div class="tl-section">
+  <div class="sh"><span class="sh-txt">事件时间线</span><div class="sh-rule"></div></div>
+  <div class="tl-wrap">
+
+    <div class="tl-legend">
+      <div class="tl-li"><div class="tl-li-dot" style="background:var(--red)"></div>故障一 · ClickHouse</div>
+      <div class="tl-li"><div class="tl-li-dot" style="background:var(--amber)"></div>故障二 · 商户余额</div>
+    </div>
+
+    <!--
+      Total window: Mar 2 00:00 → Mar 5 00:00 = 72 hours
+      Positions (% of track width after label):
+        Mar 2 12:26  → 17.3%
+        Mar 3 00:00  → 33.3%
+        Mar 4 00:00  → 66.7%
+        Mar 4 16:00  → 88.9%
+        Mar 4 20:02  → 94.5%
+        Mar 4 22:54  → 98.3%
+    -->
+
+    <div class="tl-svg-container">
+    <svg class="tl-svg" viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg" style="font-family:'IBM Plex Mono',monospace">
+      <defs>
+        <!-- row highlight gradient -->
+        <linearGradient id="rowbg" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#374057" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#374057" stop-opacity="0"/>
+        </linearGradient>
+        <!-- glow filters -->
+        <filter id="glow-red" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-amber" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Layout constants:
+           label col: 0–100, track: 110–900, track width = 790
+           rows: y centers at 60, 120, 180, 240  (row h=50)
+      -->
+
+      <!-- ── DATE AXIS ── -->
+      <!-- axis line -->
+      <line x1="110" y1="30" x2="900" y2="30" stroke="#4a5470" stroke-width="1"/>
+
+      <!-- Mar 2 -->
+      <line x1="110" y1="24" x2="110" y2="36" stroke="#6b7591" stroke-width="1"/>
+      <text x="110" y="16" text-anchor="middle" font-size="10" fill="#c2c8d8" font-weight="500">3月2日</text>
+
+      <!-- 12:26 tick — x = 110 + 790*0.173 = 110+136.7 = 246.7 -->
+      <line x1="247" y1="26" x2="247" y2="36" stroke="#e8604c" stroke-width="1" stroke-dasharray="2,2"/>
+      <text x="247" y="16" text-anchor="middle" font-size="8.5" fill="#e8604c">12:26</text>
+
+      <!-- Mar 3 — x = 110 + 790*0.333 = 110+263 = 373 -->
+      <line x1="373" y1="24" x2="373" y2="36" stroke="#6b7591" stroke-width="1"/>
+      <text x="373" y="16" text-anchor="middle" font-size="10" fill="#c2c8d8" font-weight="500">3月3日</text>
+
+      <!-- Mar 4 — x = 110 + 790*0.667 = 110+527 = 637 -->
+      <line x1="637" y1="24" x2="637" y2="36" stroke="#6b7591" stroke-width="1"/>
+      <text x="637" y="16" text-anchor="middle" font-size="10" fill="#c2c8d8" font-weight="500">3月4日</text>
+
+      <!-- 16:00 — x = 110 + 790*0.889 = 110+702 = 812 -->
+      <line x1="812" y1="26" x2="812" y2="36" stroke="#e8a94c" stroke-width="1" stroke-dasharray="2,2"/>
+      <text x="812" y="16" text-anchor="middle" font-size="8.5" fill="#e8a94c">16:00</text>
+
+      <!-- 20:02 — x = 110 + 790*0.945 = 110+747 = 857 -->
+      <line x1="857" y1="26" x2="857" y2="36" stroke="#e8a94c" stroke-width="1" stroke-dasharray="2,2"/>
+      <text x="857" y="16" text-anchor="middle" font-size="8.5" fill="#e8a94c">20:02</text>
+
+      <!-- Mar 5 -->
+      <line x1="900" y1="24" x2="900" y2="36" stroke="#6b7591" stroke-width="1"/>
+      <text x="900" y="16" text-anchor="middle" font-size="10" fill="#6b7591">3月5日</text>
+
+      <!-- day separator verticals (subtle) -->
+      <line x1="373" y1="40" x2="373" y2="278" stroke="#374057" stroke-width="1"/>
+      <line x1="637" y1="40" x2="637" y2="278" stroke="#374057" stroke-width="1"/>
+
+      <!-- ══ ROW 1: 崩溃循环 ══ -->
+      <rect x="0" y="45" width="900" height="46" fill="url(#rowbg)" rx="0"/>
+      <!-- row label -->
+      <text x="98" y="72" text-anchor="end" font-size="9" fill="#6b7591" letter-spacing="1">崩溃循环</text>
+      <!-- baseline -->
+      <line x1="110" y1="68" x2="900" y2="68" stroke="#374057" stroke-width="1"/>
+      <!-- crash loop bar: 247 → 637 (Mar2 12:26 → Mar3 end) -->
+      <rect x="247" y="60" width="390" height="16" rx="2" fill="#e8604c" fill-opacity=".18" stroke="#e8604c" stroke-opacity=".4" stroke-width="1"/>
+      <text x="442" y="72" text-anchor="middle" font-size="9" fill="#e8604c" font-weight="500">185 次崩溃重启</text>
+      <!-- start event dot -->
+      <circle cx="247" cy="68" r="6" fill="#e8604c" filter="url(#glow-red)"/>
+      <circle cx="247" cy="68" r="3" fill="#fff"/>
+      <!-- end event dot -->
+      <circle cx="637" cy="68" r="5" fill="#e8604c" fill-opacity=".7"/>
+      <circle cx="637" cy="68" r="2.5" fill="#fff"/>
+
+      <!-- ══ ROW 2: 分析数据 ══ -->
+      <text x="98" y="122" text-anchor="end" font-size="9" fill="#6b7591" letter-spacing="1">分析数据</text>
+      <line x1="110" y1="118" x2="900" y2="118" stroke="#374057" stroke-width="1"/>
+      <!-- corrupted span: 247 → 637 -->
+      <rect x="247" y="110" width="390" height="16" rx="2" fill="#e8604c"/>
+      <text x="442" y="122" text-anchor="middle" font-size="9" fill="#fff" font-weight="500">数据失真 · 报表不可信</text>
+      <!-- fixed: 637 → 870 -->
+      <rect x="637" y="110" width="233" height="16" rx="2" fill="#4ecb8d"/>
+      <text x="753" y="122" text-anchor="middle" font-size="9" fill="#1e2330" font-weight="600">已清理恢复</text>
+      <!-- fix start dot -->
+      <circle cx="637" cy="118" r="6" fill="#4ecb8d" filter="url(#glow-green)"/>
+      <circle cx="637" cy="118" r="3" fill="#fff"/>
+
+      <!-- ══ ROW 3: 商户余额 ══ -->
+      <text x="98" y="172" text-anchor="end" font-size="9" fill="#6b7591" letter-spacing="1">商户余额</text>
+      <line x1="110" y1="168" x2="900" y2="168" stroke="#374057" stroke-width="1"/>
+      <!-- normal before crash -->
+      <text x="175" y="162" text-anchor="middle" font-size="8.5" fill="#4a5470">正常</text>
+      <!-- crash trigger dot at 812 -->
+      <circle cx="812" cy="168" r="6" fill="#e8a94c" filter="url(#glow-amber)"/>
+      <circle cx="812" cy="168" r="3" fill="#fff"/>
+      <!-- inflation span: 812 → 857 -->
+      <rect x="812" y="160" width="45" height="16" rx="2" fill="#e8a94c"/>
+      <text x="834" y="172" text-anchor="middle" font-size="8.5" fill="#1e2330" font-weight="600">虚增</text>
+      <!-- stop dot -->
+      <circle cx="857" cy="168" r="5" fill="#e8a94c" fill-opacity=".8"/>
+      <circle cx="857" cy="168" r="2.5" fill="#fff"/>
+      <!-- repairing -->
+      <rect x="857" y="160" width="43" height="16" rx="2" fill="#4ecb8d" fill-opacity=".7"/>
+      <text x="878" y="172" text-anchor="middle" font-size="8.5" fill="#1e2330" font-weight="600">修复中</text>
+
+
+
+      <!-- ══ CONNECTOR LINES (vertical arrows linking related events) ══ -->
+      <!-- 12:26 trigger → affects both row1 and row2 -->
+      <line x1="247" y1="74" x2="247" y2="104" stroke="#e8604c" stroke-width="1" stroke-opacity=".4" stroke-dasharray="3,3"/>
+      <!-- Mar3 end fix connects row1→row2 -->
+      <line x1="637" y1="74" x2="637" y2="104" stroke="#4ecb8d" stroke-width="1" stroke-opacity=".3" stroke-dasharray="3,3"/>
+
+    </svg>
+    </div>
+
+    <!-- Annotations -->
+    <div class="tl-ann">
+      <div class="tl-ann-item r">
+        <span class="tl-ann-time">03-02 &nbsp;12:26</span>
+        <span class="tl-ann-text"><strong>故障触发：</strong>特殊数据组合激活死循环缺陷，进程崩溃。因断点保存失效，每次重启都从此刻重新处理，形成恶性循环，累计崩溃 185 次。</span>
+      </div>
+      <div class="tl-ann-item a">
+        <span class="tl-ann-time">03-04 &nbsp;16:00</span>
+        <span class="tl-ann-text"><strong>商户余额进程崩溃：</strong>同类缺陷复现，重启后重放 51.5 小时历史数据，余额叠加至 20:02 自然停止。实际资金始终未受影响。</span>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ ROOT CAUSE ══ -->
+<div class="rc-section">
+  <div class="sh"><span class="sh-txt">根因图解</span><div class="sh-rule"></div></div>
+  <div class="rc-box">
+    <div class="rc-sub">两起故障共享同一底层机制</div>
+    <div class="rc-flow">
+      <div class="rcf t1">触发条件<small>特殊数据组合出现</small></div>
+      <div class="rca">→</div>
+      <div class="rcf t2">进程崩溃<small>CPU 满载</small></div>
+      <div class="rca">→</div>
+      <div class="rcf t3">断点未保存<small>位置信息丢失</small></div>
+      <div class="rca">→</div>
+      <div class="rcf t4">全量重放历史<small>从旧位置重头来</small></div>
+    </div>
+    <div class="rc-loop">↑ &nbsp;重复数据 / 重复写入 → 加速下次崩溃 → 恶性循环&nbsp; ↑</div>
+    <div class="rc-outcome">
+      <strong>故障一：</strong>ClickHouse 分析数据失真（大量重复记录）&emsp;
+      <strong>故障二：</strong>商户余额显示值虚增（历史入账被重复累加）
+    </div>
+    <div class="rc-root">
+      <div class="rc-root-lbl">共同根因</div>
+      <div class="rc-root-txt">进程在崩溃时无法保存"我处理到哪里了"，导致每次重启都从历史某一时刻重新处理所有数据。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STATUS ══ -->
+<div class="st-section">
+  <div class="sh"><span class="sh-txt">处置与修复状态</span><div class="sh-rule"></div></div>
+  <div class="st-grid">
+    <div class="stc"><div class="stc-badge going">进行中</div><h4>死循环缺陷修复</h4><p>加入最大迭代次数限制 + 修正去重逻辑，触发条件已消除。</p></div>
+    <div class="stc"><div class="stc-badge going">进行中</div><h4>断点保存机制修复</h4><p>每 30 秒自动保存 + 修复 shutdown 路径，杜绝重复 replay。</p></div>
+    <div class="stc"><div class="stc-badge going">进行中</div><h4>商户余额数据修复</h4><p>以交易记录为基准重算正确余额，覆盖写入脚本执行中。</p></div>
+    <div class="stc"><div class="stc-badge plan">本周内</div><h4>余额更新幂等改造</h4><p>确保同一笔交易无论处理多少次，余额只变化一次。</p></div>
+    <div class="stc"><div class="stc-badge plan">排查中</div><h4>全系统同类缺陷排查</h4><p>该缺陷可能存在于其他插件，正在全面审查。</p></div>
+  </div>
+</div>
+
+<!-- ══ ASSURANCE ══ -->
+<div class="as-section">
+  <div class="sh"><span class="sh-txt">资金安全说明</span><div class="sh-rule"></div></div>
+  <div class="as-box">
+    <div class="as-icon">🔒</div>
+    <div>
+      <div class="as-h">两起故障均不涉及真实资金</div>
+      <div class="as-p">ClickHouse 为只读分析数据库，不参与任何资金处理。商户余额字段为显示层数据，实际资金流向由独立交易记录系统管理，始终未受影响。所有显示异常均可从交易记录完整还原。</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>PMS2.0_PH &nbsp;·&nbsp; INCIDENT REPORT &nbsp;·&nbsp; 2026-03</span>
+  <span>CONFIDENTIAL &nbsp;·&nbsp; INTERNAL USE ONLY</span>
+</footer>
+
+</div>
+</body>
+</html>
